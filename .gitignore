@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+/build/
+
+# Android
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+/captures
+.externalNativeBuild
+.cxx
+*.iml
+.DS_Store
+/app/build
+/app/.gradle
+/app/proguard-rules.pro
+
+# Local personal file
+tasks.md
