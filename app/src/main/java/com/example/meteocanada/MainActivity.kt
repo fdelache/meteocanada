@@ -1,5 +1,11 @@
 package com.example.meteocanada
 
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -57,6 +63,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import android.graphics.BitmapFactory
+import androidx.compose.ui.Alignment
 
 data class WeatherData(
     val location: String,
@@ -107,22 +114,28 @@ class MainActivity : ComponentActivity() {
         // Set initial locale based on saved preference
         val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         val lang = sharedPrefs.getString("app_language", "en") ?: "en"
+        val isDarkMode = sharedPrefs.getBoolean("dark_mode", false)
         setLocale(this, lang)
 
         enableEdgeToEdge()
         setContent {
-            MeteoCanadaTheme {
-                val navController = rememberNavController()
-                NavHost(navController = navController, startDestination = "weather") {
-                    composable("weather") {
-                        WeatherScreen(
-                            weatherData = weatherDataState.value,
-                            navController = navController
-                        )
-                    }
-                    composable("settings") {
-                        SettingsScreen(navController = navController) {
-                            recreate()
+            MeteoCanadaTheme(darkTheme = isDarkMode) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
+                ) {
+                    val navController = rememberNavController()
+                    NavHost(navController = navController, startDestination = "weather") {
+                        composable("weather") {
+                            WeatherScreen(
+                                weatherData = weatherDataState.value,
+                                navController = navController
+                            )
+                        }
+                        composable("settings") {
+                            SettingsScreen(navController = navController) {
+                                recreate()
+                            }
                         }
                     }
                 }
@@ -196,7 +209,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun parseWeatherData(json: String): WeatherData {
-        val jsonObject = JSONObject(json.substring(1, json.length - 1))
+        val jsonArray = org.json.JSONArray(json)
+        val jsonObject = jsonArray.getJSONObject(0)
         val location = jsonObject.getString("displayName")
         val observation = jsonObject.getJSONObject("observation")
         val currentCondition = observation.getString("condition")
@@ -381,11 +395,13 @@ fun GreetingPreview() {
 @Composable
 fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
     val context = LocalContext.current
+    val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    var isDarkMode by remember { mutableStateOf(sharedPrefs.getBoolean("dark_mode", false)) }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text(text = "Select Language", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Text(text = "Select Language", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = {
-            val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
             sharedPrefs.edit().putString("app_language", "en").apply()
             onLanguageChange()
             navController.popBackStack()
@@ -394,12 +410,27 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = {
-            val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
             sharedPrefs.edit().putString("app_language", "fr").apply()
             onLanguageChange()
             navController.popBackStack()
         }) {
             Text("Français")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = "Dark Mode", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+            Switch(
+                checked = isDarkMode,
+                onCheckedChange = {
+                    isDarkMode = it
+                    sharedPrefs.edit().putBoolean("dark_mode", it).apply()
+                    onLanguageChange() // Trigger theme change
+                }
+            )
         }
     }
 }
