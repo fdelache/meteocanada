@@ -94,7 +94,8 @@ data class DailyForecast(
     val summary: String,
     val temperature: String,
     val iconCode: String,
-    val iconUrl: String
+    val iconUrl: String,
+    val feelsLike: String?
 )
 
 data class HourlyForecast(
@@ -102,7 +103,8 @@ data class HourlyForecast(
     val condition: String,
     val temperature: String,
     val iconCode: String,
-    val iconUrl: String
+    val iconUrl: String,
+    val feelsLike: String?
 )
 
 class ImageCache(context: Context) {
@@ -280,13 +282,16 @@ class MainActivity : ComponentActivity() {
         val dailyForecastArray = jsonObject.getJSONObject("dailyFcst").getJSONArray("daily")
         for (i in 0 until dailyForecastArray.length()) {
             val daily = dailyForecastArray.getJSONObject(i)
+            val temperature = daily.getJSONObject("temperature").getString("metric")
+            val feelsLike = daily.optJSONObject("feelsLike")?.getString("metric")
             dailyForecasts.add(
                 DailyForecast(
                     date = daily.getString("date"),
                     summary = daily.getString("summary"),
-                    temperature = daily.getJSONObject("temperature").getString("metric"),
+                    temperature = temperature,
                     iconCode = daily.getString("iconCode"),
-                    iconUrl = "https://meteo.gc.ca/weathericons/${daily.getString("iconCode")}.gif"
+                    iconUrl = "https://meteo.gc.ca/weathericons/${daily.getString("iconCode")}.gif",
+                    feelsLike = if (feelsLike != temperature) feelsLike else null
                 )
             )
         }
@@ -295,13 +300,16 @@ class MainActivity : ComponentActivity() {
         val hourlyForecast = jsonObject.getJSONObject("hourlyFcst").getJSONArray("hourly")
         for (i in 0 until hourlyForecast.length()) {
             val hourly = hourlyForecast.getJSONObject(i)
+            val temperature = hourly.getJSONObject("temperature").getString("metric")
+            val feelsLike = hourly.optJSONObject("feelsLike")?.getString("metric")
             hourlyForecasts.add(
                 HourlyForecast(
                     time = hourly.getString("time"),
                     condition = hourly.getString("condition"),
-                    temperature = hourly.getJSONObject("temperature").getString("metric"),
+                    temperature = temperature,
                     iconCode = hourly.getString("iconCode"),
-                    iconUrl = "https://meteo.gc.ca/weathericons/${hourly.getString("iconCode")}.gif"
+                    iconUrl = "https://meteo.gc.ca/weathericons/${hourly.getString("iconCode")}.gif",
+                    feelsLike = if (feelsLike != temperature) feelsLike else null
                 )
             )
         }
@@ -354,7 +362,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
             }
             items(weatherData.dailyForecasts) { forecast ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.padding(8.dp)) {
+                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl, imageCache = imageCache)
                         if (imageBitmap != null) {
                             Image(
@@ -363,9 +371,15 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
                                 modifier = Modifier.size(48.dp)
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(text = forecast.date, modifier = Modifier.weight(1f))
                         Text(text = forecast.summary, modifier = Modifier.weight(2f))
-                        Text(text = "${forecast.temperature}°C", modifier = Modifier.weight(1f))
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            Text(text = "${forecast.temperature}°C")
+                            forecast.feelsLike?.let {
+                                Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
             }
@@ -376,7 +390,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
             }
             items(weatherData.hourlyForecasts) { forecast ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.padding(8.dp)) {
+                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl, imageCache = imageCache)
                         if (imageBitmap != null) {
                             Image(
@@ -385,9 +399,15 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
                                 modifier = Modifier.size(48.dp)
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(text = forecast.time, modifier = Modifier.weight(1f))
                         Text(text = forecast.condition, modifier = Modifier.weight(2f))
-                        Text(text = "${forecast.temperature}°C", modifier = Modifier.weight(1f))
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            Text(text = "${forecast.temperature}°C")
+                            forecast.feelsLike?.let {
+                                Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
             }
@@ -457,12 +477,12 @@ fun GreetingPreview() {
                 wind = "SW 10 km/h",
                 currentIconUrl = "https://meteo.gc.ca/weathericons/00.gif",
                 dailyForecasts = listOf(
-                    DailyForecast("Mon", "Sunny", "25", "00", "https://meteo.gc.ca/weathericons/00.gif"),
-                    DailyForecast("Tue", "Rain", "15", "12", "https://meteo.gc.ca/weathericons/12.gif")
+                    DailyForecast("Mon", "Sunny", "25", "00", "https://meteo.gc.ca/weathericons/00.gif", null),
+                    DailyForecast("Tue", "Rain", "15", "12", "https://meteo.gc.ca/weathericons/12.gif", null)
                 ),
                 hourlyForecasts = listOf(
-                    HourlyForecast("10h00", "Sunny", "22", "00", "https://meteo.gc.ca/weathericons/00.gif"),
-                    HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif")
+                    HourlyForecast("10h00", "Sunny", "22", "00", "https://meteo.gc.ca/weathericons/00.gif", null),
+                    HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif", null)
                 )
             ),
             navController = navController,
