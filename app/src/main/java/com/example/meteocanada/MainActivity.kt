@@ -85,6 +85,7 @@ data class WeatherData(
     val currentTemperature: String,
     val wind: String,
     val currentIconUrl: String,
+    val currentFeelsLike: String?,
     val dailyForecasts: List<DailyForecast>,
     val hourlyForecasts: List<HourlyForecast>
 )
@@ -275,6 +276,7 @@ class MainActivity : ComponentActivity() {
         val observation = jsonObject.getJSONObject("observation")
         val currentCondition = observation.getString("condition")
         val currentTemperature = observation.getJSONObject("temperature").getString("metric")
+        val currentFeelsLike = observation.optJSONObject("feelsLike")?.getString("metric")
         val wind = "${observation.getString("windDirection")} ${observation.getJSONObject("windSpeed").getString("metric")} km/h"
         val currentIconUrl = "https://meteo.gc.ca/weathericons/${observation.getString("iconCode")}.gif"
 
@@ -314,7 +316,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        return WeatherData(location, currentCondition, currentTemperature, wind, currentIconUrl, dailyForecasts, hourlyForecasts)
+        return WeatherData(location, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
     }
 }
 
@@ -350,7 +352,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-                        Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C")
+                        Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
                         Text(text = stringResource(R.string.wind, weatherData.wind))
                     }
                 }
@@ -474,6 +476,7 @@ fun GreetingPreview() {
                 location = "Montreal",
                 currentCondition = "Partly Cloudy",
                 currentTemperature = "20",
+                currentFeelsLike = "25",
                 wind = "SW 10 km/h",
                 currentIconUrl = "https://meteo.gc.ca/weathericons/00.gif",
                 dailyForecasts = listOf(
