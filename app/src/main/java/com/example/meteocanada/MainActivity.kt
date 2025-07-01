@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -83,6 +84,7 @@ data class WeatherData(
     val currentCondition: String,
     val currentTemperature: String,
     val wind: String,
+    val currentIconUrl: String,
     val dailyForecasts: List<DailyForecast>,
     val hourlyForecasts: List<HourlyForecast>
 )
@@ -272,6 +274,7 @@ class MainActivity : ComponentActivity() {
         val currentCondition = observation.getString("condition")
         val currentTemperature = observation.getJSONObject("temperature").getString("metric")
         val wind = "${observation.getString("windDirection")} ${observation.getJSONObject("windSpeed").getString("metric")} km/h"
+        val currentIconUrl = "https://meteo.gc.ca/weathericons/${observation.getString("iconCode")}.gif"
 
         val dailyForecasts = mutableListOf<DailyForecast>()
         val dailyForecastArray = jsonObject.getJSONObject("dailyFcst").getJSONArray("daily")
@@ -303,7 +306,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        return WeatherData(location, currentCondition, currentTemperature, wind, dailyForecasts, hourlyForecasts)
+        return WeatherData(location, currentCondition, currentTemperature, wind, currentIconUrl, dailyForecasts, hourlyForecasts)
     }
 }
 
@@ -327,9 +330,22 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
 
         if (weatherData != null) {
             item {
-                Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-                Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C")
-                Text(text = stringResource(R.string.wind, weatherData.wind))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = weatherData.currentIconUrl, imageCache = imageCache)
+                    if (imageBitmap != null) {
+                        Image(
+                            bitmap = imageBitmap.asImageBitmap(),
+                            contentDescription = weatherData.currentCondition,
+                            modifier = Modifier.size(72.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+                        Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C")
+                        Text(text = stringResource(R.string.wind, weatherData.wind))
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
@@ -439,6 +455,7 @@ fun GreetingPreview() {
                 currentCondition = "Partly Cloudy",
                 currentTemperature = "20",
                 wind = "SW 10 km/h",
+                currentIconUrl = "https://meteo.gc.ca/weathericons/00.gif",
                 dailyForecasts = listOf(
                     DailyForecast("Mon", "Sunny", "25", "00", "https://meteo.gc.ca/weathericons/00.gif"),
                     DailyForecast("Tue", "Rain", "15", "12", "https://meteo.gc.ca/weathericons/12.gif")
@@ -472,7 +489,14 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = stringResource(R.string.select_language), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { 
+                selectedLanguage = "en"
+                sharedPrefs.edit { putString("app_language", "en") }
+                onLanguageChange()
+            },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             RadioButton(
                 selected = selectedLanguage == "en",
                 onClick = { 
@@ -483,7 +507,14 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
             )
             Text("English")
         }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { 
+                selectedLanguage = "fr"
+                sharedPrefs.edit { putString("app_language", "fr") }
+                onLanguageChange()
+            },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             RadioButton(
                 selected = selectedLanguage == "fr",
                 onClick = { 
