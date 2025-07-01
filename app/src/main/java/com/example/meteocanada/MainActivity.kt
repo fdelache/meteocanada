@@ -25,10 +25,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -460,6 +462,14 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
     var isDarkMode by remember { mutableStateOf(sharedPrefs.getBoolean("dark_mode", false)) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = stringResource(R.string.settings), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         Text(text = stringResource(R.string.select_language), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -469,7 +479,6 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                     selectedLanguage = "en"
                     sharedPrefs.edit { putString("app_language", "en") }
                     onLanguageChange()
-                    navController.popBackStack()
                 }
             )
             Text("English")
@@ -481,7 +490,6 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                     selectedLanguage = "fr"
                     sharedPrefs.edit { putString("app_language", "fr") }
                     onLanguageChange()
-                    navController.popBackStack()
                 }
             )
             Text("Français")
