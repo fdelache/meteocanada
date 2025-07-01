@@ -300,7 +300,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun WeatherScreen(weatherData: WeatherData?, navController: NavController, imageCache: ImageCache, modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier.padding(16.dp)) {
+    LazyColumn(modifier = modifier.padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 weatherData?.let {
