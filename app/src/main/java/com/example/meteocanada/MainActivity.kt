@@ -325,7 +325,7 @@ class MainActivity : ComponentActivity() {
 fun WeatherScreen(weatherData: WeatherData?, navController: NavController, imageCache: ImageCache, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 weatherData?.let {
                     Text(text = stringResource(R.string.location, it.location), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
                 } ?: run {
