@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -198,6 +199,9 @@ class MainActivity : ComponentActivity() {
                                 recreate()
                             }
                         }
+                        composable("radar") {
+                            RadarScreen(navController = navController)
+                        }
                     }
                 }
             }
@@ -340,7 +344,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
 
         if (weatherData != null) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = weatherData.currentIconUrl, imageCache = imageCache)
                     if (imageBitmap != null) {
                         Image(
@@ -350,10 +354,17 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
                         )
                     }
                     Spacer(modifier = Modifier.width(16.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
                         Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
                         Text(text = stringResource(R.string.wind, weatherData.wind))
+                    }
+                    IconButton(onClick = { navController.navigate("radar") }) {
+                        Icon(
+                            painterResource(
+                                id = R.drawable.map_24px
+                            ), contentDescription = stringResource(R.string.radar)
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -564,5 +575,19 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                 }
             )
         }
+    }
+}
+
+@Composable
+fun RadarScreen(navController: NavController) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = stringResource(R.string.radar), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        }
+        // Radar content will go here in a follow-up
     }
 }
