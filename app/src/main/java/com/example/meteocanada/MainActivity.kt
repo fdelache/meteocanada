@@ -41,7 +41,6 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -64,6 +63,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.Alignment
+import androidx.core.content.edit
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 data class WeatherData(
     val location: String,
@@ -90,10 +93,51 @@ data class HourlyForecast(
     val iconUrl: String
 )
 
+class ImageCache(context: Context) {
+    private val inMemoryCache = mutableMapOf<String, Bitmap>()
+    private val diskCacheDir = File(context.cacheDir, "image_cache")
+
+    init {
+        if (!diskCacheDir.exists()) {
+            diskCacheDir.mkdirs()
+        }
+    }
+
+    fun get(url: String): Bitmap? {
+        inMemoryCache[url]?.let {
+            return it
+        }
+
+        val file = File(diskCacheDir, url.hashCode().toString())
+        if (file.exists()) {
+            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            if (bitmap != null) {
+                inMemoryCache[url] = bitmap
+                return bitmap
+            }
+        }
+
+        return null
+    }
+
+    fun put(url: String, bitmap: Bitmap) {
+        inMemoryCache[url] = bitmap
+        val file = File(diskCacheDir, url.hashCode().toString())
+        try {
+            FileOutputStream(file).use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val weatherDataState = mutableStateOf<WeatherData?>(null)
+    private lateinit var imageCache: ImageCache
 
     private val requestPermissionLauncher =
         registerForActivityResult(
@@ -110,12 +154,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        imageCache = ImageCache(this)
 
         // Set initial locale based on saved preference
         val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         val lang = sharedPrefs.getString("app_language", "en") ?: "en"
         val isDarkMode = sharedPrefs.getBoolean("dark_mode", false)
-        setLocale(this, lang)
+        setLocale(lang)
 
         enableEdgeToEdge()
         setContent {
@@ -129,7 +174,8 @@ class MainActivity : ComponentActivity() {
                         composable("weather") {
                             WeatherScreen(
                                 weatherData = weatherDataState.value,
-                                navController = navController
+                                navController = navController,
+                                imageCache = imageCache
                             )
                         }
                         composable("settings") {
@@ -165,7 +211,7 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(context)
     }
 
-    private fun setLocale(context: Context, languageCode: String) {
+    private fun setLocale(languageCode: String) {
         val locale = Locale.Builder().setLanguage(languageCode).build()
         Locale.setDefault(locale)
     }
@@ -218,9 +264,9 @@ class MainActivity : ComponentActivity() {
         val wind = "${observation.getString("windDirection")} ${observation.getJSONObject("windSpeed").getString("metric")} km/h"
 
         val dailyForecasts = mutableListOf<DailyForecast>()
-        val dailyFcstArray = jsonObject.getJSONObject("dailyFcst").getJSONArray("daily")
-        for (i in 0 until dailyFcstArray.length()) {
-            val daily = dailyFcstArray.getJSONObject(i)
+        val dailyForecastArray = jsonObject.getJSONObject("dailyFcst").getJSONArray("daily")
+        for (i in 0 until dailyForecastArray.length()) {
+            val daily = dailyForecastArray.getJSONObject(i)
             dailyForecasts.add(
                 DailyForecast(
                     date = daily.getString("date"),
@@ -233,9 +279,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val hourlyForecasts = mutableListOf<HourlyForecast>()
-        val hourlyFcst = jsonObject.getJSONObject("hourlyFcst").getJSONArray("hourly")
-        for (i in 0 until hourlyFcst.length()) {
-            val hourly = hourlyFcst.getJSONObject(i)
+        val hourlyForecast = jsonObject.getJSONObject("hourlyFcst").getJSONArray("hourly")
+        for (i in 0 until hourlyForecast.length()) {
+            val hourly = hourlyForecast.getJSONObject(i)
             hourlyForecasts.add(
                 HourlyForecast(
                     time = hourly.getString("time"),
@@ -253,7 +299,7 @@ class MainActivity : ComponentActivity() {
 
 
 @Composable
-fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modifier: Modifier = Modifier) {
+fun WeatherScreen(weatherData: WeatherData?, navController: NavController, imageCache: ImageCache, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.padding(16.dp)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -283,7 +329,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modif
             items(weatherData.dailyForecasts) { forecast ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.padding(8.dp)) {
-                        val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl)
+                        val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl, imageCache = imageCache)
                         if (imageBitmap != null) {
                             Image(
                                 bitmap = imageBitmap.asImageBitmap(),
@@ -305,7 +351,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modif
             items(weatherData.hourlyForecasts) { forecast ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.padding(8.dp)) {
-                        val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl)
+                        val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl, imageCache = imageCache)
                         if (imageBitmap != null) {
                             Image(
                                 bitmap = imageBitmap.asImageBitmap(),
@@ -324,44 +370,47 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modif
 }
 
 @Composable
-fun loadImageBitmap(imageUrl: String): Bitmap? {
-    val context = LocalContext.current
-    val bitmapState: State<Bitmap?> = produceState<Bitmap?>(initialValue = null, imageUrl) {
-        value = try {
-            withContext(Dispatchers.IO) {
-                val url = URL(imageUrl)
-                var connection: HttpURLConnection? = null
-                var inputStream: java.io.InputStream? = null
-                try {
-                    connection = url.openConnection() as HttpURLConnection
-                    connection.doInput = true
-                    connection.connect()
-                    val responseCode = connection.responseCode
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        inputStream = connection.inputStream
-                        if (inputStream != null) {
-                            val bufferedInputStream = java.io.BufferedInputStream(inputStream)
-                            val bitmap = BitmapFactory.decodeStream(bufferedInputStream)
-                            if (bitmap == null) {
-                                Log.e("ImageLoader", "BitmapFactory.decodeStream returned null for $imageUrl")
+fun loadImageBitmap(imageUrl: String, imageCache: ImageCache): Bitmap? {
+    val bitmapState: State<Bitmap?> = produceState(initialValue = imageCache.get(imageUrl), imageUrl) {
+        if (value == null) {
+            value = try {
+                withContext(Dispatchers.IO) {
+                    val url = URL(imageUrl)
+                    var connection: HttpURLConnection? = null
+                    var inputStream: java.io.InputStream? = null
+                    try {
+                        connection = url.openConnection() as HttpURLConnection
+                        connection.doInput = true
+                        connection.connect()
+                        val responseCode = connection.responseCode
+                        if (responseCode == HttpURLConnection.HTTP_OK) {
+                            inputStream = connection.inputStream
+                            if (inputStream != null) {
+                                val bufferedInputStream = java.io.BufferedInputStream(inputStream)
+                                val bitmap = BitmapFactory.decodeStream(bufferedInputStream)
+                                if (bitmap != null) {
+                                    imageCache.put(imageUrl, bitmap)
+                                } else {
+                                    Log.e("ImageLoader", "BitmapFactory.decodeStream returned null for $imageUrl")
+                                }
+                                bitmap
+                            } else {
+                                Log.e("ImageLoader", "Input stream is null for $imageUrl")
+                                null
                             }
-                            bitmap
                         } else {
-                            Log.e("ImageLoader", "Input stream is null for $imageUrl")
+                            Log.e("ImageLoader", "HTTP error code: $responseCode, message: ${connection.responseMessage} for $imageUrl")
                             null
                         }
-                    } else {
-                        Log.e("ImageLoader", "HTTP error code: $responseCode, message: ${connection.responseMessage} for $imageUrl")
-                        null
+                    } finally {
+                        inputStream?.close()
+                        connection?.disconnect()
                     }
-                } finally {
-                    inputStream?.close()
-                    connection?.disconnect()
                 }
+            } catch (e: Exception) {
+                Log.e("ImageLoader", "Failed to load image from $imageUrl: ${e.message}", e)
+                null
             }
-        } catch (e: Exception) {
-            Log.e("ImageLoader", "Failed to load image from $imageUrl: ${e.message}", e)
-            null
         }
     }
     return bitmapState.value
@@ -372,6 +421,8 @@ fun loadImageBitmap(imageUrl: String): Bitmap? {
 fun GreetingPreview() {
     MeteoCanadaTheme {
         val navController = rememberNavController()
+        val context = LocalContext.current
+        val imageCache = remember { ImageCache(context) }
         WeatherScreen(
             weatherData = WeatherData(
                 location = "Montreal",
@@ -387,7 +438,8 @@ fun GreetingPreview() {
                     HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif")
                 )
             ),
-            navController = navController
+            navController = navController,
+            imageCache = imageCache
         )
     }
 }
@@ -402,7 +454,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
         Text(text = "Select Language", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = {
-            sharedPrefs.edit().putString("app_language", "en").apply()
+            sharedPrefs.edit {putString("app_language", "en") }
             onLanguageChange()
             navController.popBackStack()
         }) {
@@ -410,7 +462,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = {
-            sharedPrefs.edit().putString("app_language", "fr").apply()
+            sharedPrefs.edit { putString("app_language", "fr") }
             onLanguageChange()
             navController.popBackStack()
         }) {
@@ -427,7 +479,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                 checked = isDarkMode,
                 onCheckedChange = {
                     isDarkMode = it
-                    sharedPrefs.edit().putBoolean("dark_mode", it).apply()
+                    sharedPrefs.edit { putBoolean("dark_mode", it) }
                     onLanguageChange() // Trigger theme change
                 }
             )
