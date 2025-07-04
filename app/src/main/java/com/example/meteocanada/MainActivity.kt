@@ -32,7 +32,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -52,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -64,6 +64,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.meteocanada.ui.composables.RadarMap
 import com.example.meteocanada.ui.theme.MeteoCanadaTheme
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -82,6 +83,8 @@ import java.util.Locale
 
 data class WeatherData(
     val location: String,
+    val latitude: Double,
+    val longitude: Double,
     val currentCondition: String,
     val currentTemperature: String,
     val wind: String,
@@ -173,7 +176,7 @@ class MainActivity : ComponentActivity() {
         imageCache = ImageCache(this)
 
         // Set initial locale based on saved preference
-        val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
         val lang = sharedPrefs.getString("app_language", "en") ?: "en"
         val isDarkMode = sharedPrefs.getBoolean("dark_mode", false)
         setLocale(lang)
@@ -200,7 +203,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         composable("radar") {
-                            RadarScreen(navController = navController)
+                            weatherDataState.value?.let {
+                                RadarScreen(navController = navController, lat = it.latitude, lon = it.longitude)
+                            }
                         }
                     }
                 }
@@ -221,7 +226,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun attachBaseContext(newBase: Context?) {
-        val sharedPrefs = newBase?.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val sharedPrefs = newBase?.getSharedPreferences("app_prefs", MODE_PRIVATE)
         val lang = sharedPrefs?.getString("app_language", "en") ?: "en"
         val locale = LocaleListCompat.forLanguageTags(lang)
         val config = Configuration(newBase?.resources?.configuration)
@@ -256,7 +261,7 @@ class MainActivity : ComponentActivity() {
     private fun fetchWeather(latitude: Double, longitude: Double) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 val lang = sharedPrefs.getString("app_language", "en") ?: "en"
                 val url = URL("https://meteo.gc.ca/api/app/v3/$lang/Location/$latitude,$longitude?type=city")
                 val connection = url.openConnection() as HttpURLConnection
@@ -264,7 +269,7 @@ class MainActivity : ComponentActivity() {
                 val reader = BufferedReader(InputStreamReader(connection.inputStream))
                 val response = reader.readText()
                 Log.d("WeatherData", response)
-                val weatherData = parseWeatherData(response)
+                val weatherData = parseWeatherData(response, latitude, longitude)
                 weatherDataState.value = weatherData
             } catch (e: Exception) {
                 Log.e("WeatherData", "Failed to fetch weather data: ${e::class.simpleName}: ${e.message}", e)
@@ -273,7 +278,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun parseWeatherData(json: String): WeatherData {
+    private fun parseWeatherData(json: String, latitude: Double, longitude: Double): WeatherData {
         val jsonArray = org.json.JSONArray(json)
         val jsonObject = jsonArray.getJSONObject(0)
         val location = jsonObject.getString("displayName")
@@ -320,7 +325,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        return WeatherData(location, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
+        return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
     }
 }
 
@@ -485,6 +490,8 @@ fun GreetingPreview() {
         WeatherScreen(
             weatherData = WeatherData(
                 location = "Montreal",
+                latitude = 45.5017,
+                longitude = -73.5673,
                 currentCondition = "Partly Cloudy",
                 currentTemperature = "20",
                 currentFeelsLike = "25",
@@ -579,7 +586,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
 }
 
 @Composable
-fun RadarScreen(navController: NavController) {
+fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { navController.popBackStack() }) {
@@ -588,6 +595,6 @@ fun RadarScreen(navController: NavController) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = stringResource(R.string.radar), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         }
-        // Radar content will go here in a follow-up
+        RadarMap(lat = lat, lon = lon, zoom = 8, modifier = Modifier.fillMaxSize())
     }
 }
