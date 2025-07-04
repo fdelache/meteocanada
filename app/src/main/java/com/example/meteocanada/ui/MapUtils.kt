@@ -98,37 +98,32 @@ object MapUtils {
     suspend fun getLatestTimestamp(): String? {
         return withContext(Dispatchers.IO) {
             try {
-//                val url = URL("https://meteo.gc.ca/api/map/radar.3978/wmts/1.0.0/WMTSCapabilities.xml")
-//                val inputStream = url.openStream()
-//                val parser: XmlPullParser = Xml.newPullParser()
-//                parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
-//                parser.setInput(inputStream, null)
-//
-//                var eventType = parser.eventType
-//                var latestTimestamp: String? = null
-//
-//                while (eventType != XmlPullParser.END_DOCUMENT) {
-//                    if (eventType == XmlPullParser.START_TAG && parser.name == "Dimension") {
-//                        var isTimeDimension = false
-//                        for (i in 0 until parser.attributeCount) {
-//                            if (parser.getAttributeName(i) == "name" && parser.getAttributeValue(i) == "time") {
-//                                isTimeDimension = true
-//                                break
-//                            }
-//                        }
-//
-//                        if (isTimeDimension) {
-//                            while (parser.next() != XmlPullParser.END_TAG) {
-//                                if (parser.eventType == XmlPullParser.START_TAG && parser.name == "Value") {
-//                                    latestTimestamp = parser.nextText()
-//                                }
-//                            }
-//                        }
-//                    }
-//                    eventType = parser.next()
-//                }
-//                latestTimestamp
-                "2025-07-04T00-36-00Z"
+                val url = URL("https://meteo.gc.ca/api/map/radar.3978/wmts/1.0.0/WMTSCapabilities.xml")
+                val inputStream = url.openStream()
+                val parser: XmlPullParser = Xml.newPullParser()
+                parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+                parser.setInput(inputStream, null)
+
+                var latestTimestamp: String? = null
+                val timestampRegex = "(\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}Z)".toRegex()
+
+                var eventType = parser.eventType
+                while (eventType != XmlPullParser.END_DOCUMENT) {
+                    if (eventType == XmlPullParser.START_TAG && (parser.name == "ows:Identifier" || parser.name == "Identifier")) {
+                        val text = parser.nextText()
+                        if (text != null) {
+                            timestampRegex.find(text)?.let {
+                                val timestamp = it.value
+                                if (latestTimestamp == null || timestamp > latestTimestamp) {
+                                    latestTimestamp = timestamp
+                                }
+                            }
+                        }
+                    }
+                    eventType = parser.next()
+                }
+                inputStream.close()
+                latestTimestamp
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
