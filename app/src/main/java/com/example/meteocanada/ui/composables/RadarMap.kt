@@ -1,7 +1,8 @@
 package com.example.meteocanada.ui.composables
 
-import android.util.Log
-import androidx.compose.foundation.layout.Box
+import android.annotation.SuppressLint
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
@@ -10,6 +11,7 @@ import com.example.meteocanada.ui.MapUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun RadarMap(lat: Double, lon: Double, zoom: Int, modifier: Modifier = Modifier) {
     val timestamp = produceState<String?>(initialValue = null) {
@@ -19,34 +21,67 @@ fun RadarMap(lat: Double, lon: Double, zoom: Int, modifier: Modifier = Modifier)
     }.value
 
     if (timestamp != null) {
-        val (baseZoom, baseX, baseY) = MapUtils.getTileCoordinates(lat, lon, zoom, "base")
-        val (textZoom, textX, textY) = MapUtils.getTileCoordinates(lat, lon, zoom, "text")
-        val (radarZoom, radarX, radarY) = MapUtils.getTileCoordinates(lat, lon, zoom, "radar")
+        BoxWithConstraints(modifier = modifier) {
+            val widthPx = constraints.maxWidth
+            val heightPx = constraints.maxHeight
 
-        val baseUrl = MapUtils.getBaseMapUrl(baseZoom, baseX, baseY)
-        val cityNamesUrl = MapUtils.getCityNamesMapUrl(textZoom, textX, textY)
-        val radarUrl = MapUtils.getRadarMapUrl(timestamp, radarZoom, radarX, radarY)
+            val projectedBounds = MapUtils.getProjectedBounds(lat, lon, zoom, widthPx, heightPx)
 
-        Log.d("RadarMap", "Base URL: $baseUrl")
-        Log.d("RadarMap", "City Names URL: $cityNamesUrl")
-        Log.d("RadarMap", "Radar URL: $radarUrl")
+            val (baseMinX, baseMinY, baseMaxX, baseMaxY) = MapUtils.getTileCoordinatesForBounds(projectedBounds, zoom, "base")
+            val (textMinX, textMinY, textMaxX, textMaxY) = MapUtils.getTileCoordinatesForBounds(projectedBounds, zoom, "text")
+            val (radarMinX, radarMinY, radarMaxX, radarMaxY) = MapUtils.getTileCoordinatesForBounds(projectedBounds, zoom, "radar")
 
-        Box(modifier = modifier) {
-            AsyncImage(
-                model = baseUrl,
-                contentDescription = "Base Map",
-                modifier = Modifier.matchParentSize()
-            )
-            AsyncImage(
-                model = cityNamesUrl,
-                contentDescription = "City Names",
-                modifier = Modifier.matchParentSize()
-            )
-            AsyncImage(
-                model = radarUrl,
-                contentDescription = "Radar Map",
-                modifier = Modifier.matchParentSize()
-            )
+            val baseLayoutParams = MapUtils.getTileLayoutParams(zoom, "base")
+            val textLayoutParams = MapUtils.getTileLayoutParams(zoom, "text")
+            val radarLayoutParams = MapUtils.getTileLayoutParams(zoom, "radar")
+
+            if (baseLayoutParams != null) {
+                for (y in baseMinY..baseMaxY) {
+                    for (x in baseMinX..baseMaxX) {
+                        val left = (x * baseLayoutParams.tileWidth) - (projectedBounds.first.x - baseLayoutParams.topLeftCornerX) / baseLayoutParams.resolution
+                        val top = (y * baseLayoutParams.tileHeight) - (baseLayoutParams.topLeftCornerY - projectedBounds.second.y) / baseLayoutParams.resolution
+                        AsyncImage(
+                            model = MapUtils.getBaseMapUrl(zoom, x, y),
+                            contentDescription = "Base Map Tile",
+                            modifier = Modifier.offset {
+                                androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt())
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (textLayoutParams != null) {
+                for (y in textMinY..textMaxY) {
+                    for (x in textMinX..textMaxX) {
+                        val left = (x * textLayoutParams.tileWidth) - (projectedBounds.first.x - textLayoutParams.topLeftCornerX) / textLayoutParams.resolution
+                        val top = (y * textLayoutParams.tileHeight) - (textLayoutParams.topLeftCornerY - projectedBounds.second.y) / textLayoutParams.resolution
+                        AsyncImage(
+                            model = MapUtils.getCityNamesMapUrl(zoom, x, y),
+                            contentDescription = "City Names Tile",
+                            modifier = Modifier.offset {
+                                androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt())
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (radarLayoutParams != null) {
+                for (y in radarMinY..radarMaxY) {
+                    for (x in radarMinX..radarMaxX) {
+                        val left = (x * radarLayoutParams.tileWidth) - (projectedBounds.first.x - radarLayoutParams.topLeftCornerX) / radarLayoutParams.resolution
+                        val top = (y * radarLayoutParams.tileHeight) - (radarLayoutParams.topLeftCornerY - projectedBounds.second.y) / radarLayoutParams.resolution
+                        AsyncImage(
+                            model = MapUtils.getRadarMapUrl(timestamp, zoom, x, y),
+                            contentDescription = "Radar Map Tile",
+                            modifier = Modifier.offset {
+                                androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt())
+                            }
+                        )
+                    }
+                }
+            }
         }
     }
 }

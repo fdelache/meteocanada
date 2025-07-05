@@ -11,6 +11,8 @@ import org.locationtech.proj4j.ProjCoordinate
 import org.xmlpull.v1.XmlPullParser
 import java.net.URL
 
+data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
 object MapUtils {
 
     private val crsFactory = CRSFactory()
@@ -131,34 +133,50 @@ object MapUtils {
         }
     }
 
-    fun getTileCoordinates(lat: Double, lon: Double, zoom: Int, layer: String): Triple<Int, Int, Int> {
-        val projCoordinate = ProjCoordinate(lon, lat)
-        val resultCoordinate = ProjCoordinate()
-        transform.transform(projCoordinate, resultCoordinate)
-
-        val easting = resultCoordinate.x
-        val northing = resultCoordinate.y
+    fun getTileCoordinatesForBounds(bounds: Pair<ProjCoordinate, ProjCoordinate>, zoom: Int, layer: String): Quadruple<Int, Int, Int, Int> {
+        val (min, max) = bounds
 
         val tileMatrixSet = when (layer) {
             "radar" -> radarTileMatrixSet
             "base" -> baseMapTileMatrixSet
             "text" -> cityTextTileMatrixSet
-            else -> return Triple(zoom, -1, -1)
+            else -> return Quadruple(-1, -1, -1, -1)
         }
 
         if (zoom >= tileMatrixSet.size) {
-            return Triple(zoom, -1, -1) // Invalid zoom
+            return Quadruple(-1, -1, -1, -1) // Invalid zoom
         }
         val tileMatrix = tileMatrixSet[zoom]
 
-        // Standard pixel size in meters, as defined by OGC.
         val pixelSize = 0.00028
         val resolution = tileMatrix.scaleDenominator * pixelSize
 
-        val tileX = ((easting - tileMatrix.topLeftCornerX) / resolution).toInt() / tileMatrix.tileWidth
-        val tileY = ((tileMatrix.topLeftCornerY - northing) / resolution).toInt() / tileMatrix.tileHeight
+        val minTileX = ((min.x - tileMatrix.topLeftCornerX) / resolution).toInt() / tileMatrix.tileWidth
+        val maxTileX = ((max.x - tileMatrix.topLeftCornerX) / resolution).toInt() / tileMatrix.tileWidth
+        val minTileY = ((tileMatrix.topLeftCornerY - max.y) / resolution).toInt() / tileMatrix.tileHeight
+        val maxTileY = ((tileMatrix.topLeftCornerY - min.y) / resolution).toInt() / tileMatrix.tileHeight
 
-        return Triple(zoom, tileX, tileY)
+        return Quadruple(minTileX, minTileY, maxTileX, maxTileY)
+    }
+
+    fun getProjectedBounds(lat: Double, lon: Double, zoom: Int, width: Int, height: Int): Pair<ProjCoordinate, ProjCoordinate> {
+        val projCoordinate = ProjCoordinate(lon, lat)
+        val centerProjected = ProjCoordinate()
+        transform.transform(projCoordinate, centerProjected)
+
+        val tileMatrix = radarTileMatrixSet[zoom]
+        val pixelSize = 0.00028
+        val resolution = tileMatrix.scaleDenominator * pixelSize
+
+        val halfWidthMeters = width / 2.0 * resolution
+        val halfHeightMeters = height / 2.0 * resolution
+
+        val minX = centerProjected.x - halfWidthMeters
+        val minY = centerProjected.y - halfHeightMeters
+        val maxX = centerProjected.x + halfWidthMeters
+        val maxY = centerProjected.y + halfHeightMeters
+
+        return Pair(ProjCoordinate(minX, minY), ProjCoordinate(maxX, maxY))
     }
 
     fun getBaseMapUrl(zoom: Int, x: Int, y: Int): String {
@@ -172,5 +190,39 @@ object MapUtils {
     fun getRadarMapUrl(timestamp: String, zoom: Int, x: Int, y: Int): String {
         val zoomStr = zoom.toString().padStart(2, '0')
         return "https://meteo.gc.ca/api/map/radar.3978/wmts/RADAR_1KM_RRAI_14_${timestamp}_512/wxo_3978_grid_512/$zoomStr/$x/$y.png"
+    }
+
+    data class TileLayoutParams(
+        val tileWidth: Int,
+        val tileHeight: Int,
+        val resolution: Double,
+        val topLeftCornerX: Double,
+        val topLeftCornerY: Double
+    )
+
+    fun getTileLayoutParams(zoom: Int, layer: String): TileLayoutParams? {
+        val tileMatrixSet = when (layer) {
+            "radar" -> radarTileMatrixSet
+            "base" -> baseMapTileMatrixSet
+            "text" -> cityTextTileMatrixSet
+            else -> return null
+        }
+
+        if (zoom >= tileMatrixSet.size) {
+            return null // Invalid zoom
+        }
+        val tileMatrix = tileMatrixSet[zoom]
+
+        // Standard pixel size in meters, as defined by OGC.
+        val pixelSize = 0.00028
+        val resolution = tileMatrix.scaleDenominator * pixelSize
+
+        return TileLayoutParams(
+            tileWidth = tileMatrix.tileWidth,
+            tileHeight = tileMatrix.tileHeight,
+            resolution = resolution,
+            topLeftCornerX = tileMatrix.topLeftCornerX,
+            topLeftCornerY = tileMatrix.topLeftCornerY
+        )
     }
 }
