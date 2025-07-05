@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import coil3.compose.AsyncImage
 import com.example.meteocanada.ui.MapUtils
 import kotlinx.coroutines.Dispatchers
@@ -77,7 +78,7 @@ fun RadarMap(lat: Double, lon: Double, zoom: Int, modifier: Modifier = Modifier)
                             contentDescription = "Radar Map Tile",
                             modifier = Modifier.offset {
                                 androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt())
-                            }
+                            }.alpha(0.5f)
                         )
                     }
                 }
