@@ -249,16 +249,16 @@ class MainActivity : ComponentActivity() {
                     fetchWeather(location.latitude, location.longitude)
                 } else {
                     Log.e("LocationData", "Location not found: FusedLocationProviderClient returned null")
-                    // Handle location not found
+                    fetchWeather(45.529, -73.562)
                 }
             }
             .addOnFailureListener { e ->
                 Log.e("LocationData", "Failed to get location: ${e.message}", e)
-                // Handle failure to get location
+                fetchWeather(45.529, -73.562)
             }
     }
 
-    private fun fetchWeather(latitude: Double, longitude: Double) {
+    private fun fetchWeather(latitude: Double, longitude: Double, isRetry: Boolean = false) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
@@ -272,8 +272,11 @@ class MainActivity : ComponentActivity() {
                 val weatherData = parseWeatherData(response, latitude, longitude)
                 weatherDataState.value = weatherData
             } catch (e: Exception) {
-                Log.e("WeatherData", "Failed to fetch weather data: ${e::class.simpleName}: ${e.message}", e)
-                // Handle error
+                Log.e("WeatherData", "Failed to fetch weather data for $latitude,$longitude: ${e::class.simpleName}: ${e.message}", e)
+                if (!isRetry) {
+                    Log.d("WeatherData", "Retrying with fallback location 45.529, -73.562")
+                    fetchWeather(45.529, -73.562, true)
+                }
             }
         }
     }
