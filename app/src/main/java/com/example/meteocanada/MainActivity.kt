@@ -32,7 +32,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
@@ -605,11 +604,19 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
     var currentLayerIndex by remember { mutableIntStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
 
+    LaunchedEffect(layers) {
+        if (layers.isNotEmpty()) {
+            currentLayerIndex = layers.size - 1
+        }
+    }
+
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             while (true) {
                 delay(100)
-                currentLayerIndex = (currentLayerIndex + 1) % layers.size
+                if (layers.isNotEmpty()) {
+                    currentLayerIndex = (currentLayerIndex + 1) % layers.size
+                }
             }
         }
     }
