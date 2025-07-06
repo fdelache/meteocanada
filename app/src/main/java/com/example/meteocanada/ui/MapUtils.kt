@@ -288,4 +288,25 @@ object MapUtils {
             topLeftCornerY = tileMatrix.topLeftCornerY
         )
     }
+
+    fun getOptimalZoomForWidth(screenWidthPx: Int, targetWidthKm: Double): Int {
+        val targetWidthMeters = targetWidthKm * 1000
+        val pixelSize = 0.00028 // OGC standard pixel size in meters
+
+        var bestZoom = 0
+        var smallestDifference = Double.MAX_VALUE
+
+        // Using radarTileMatrixSet as it's the primary layer for zoom calculation
+        for ((index, tileMatrix) in radarTileMatrixSet.withIndex()) {
+            val resolution = tileMatrix.scaleDenominator * pixelSize
+            val currentWidthMeters = screenWidthPx * resolution
+            val difference = kotlin.math.abs(currentWidthMeters - targetWidthMeters)
+
+            if (difference < smallestDifference) {
+                smallestDifference = difference
+                bestZoom = index
+            }
+        }
+        return bestZoom
+    }
 }

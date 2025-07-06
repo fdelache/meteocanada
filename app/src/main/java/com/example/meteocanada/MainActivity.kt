@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -601,6 +602,11 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
         value = MapUtils.getRadarLayers()
     }
 
+    val screenWidthPx = LocalWindowInfo.current.containerSize.width
+    val optimalZoom = remember(screenWidthPx) {
+        MapUtils.getOptimalZoomForWidth(screenWidthPx, 50.0)
+    }
+
     var currentLayerIndex by remember { mutableIntStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
 
@@ -630,7 +636,7 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
             Text(text = stringResource(R.string.radar), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         }
         if (layers.isNotEmpty()) {
-            RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = 8, modifier = Modifier.weight(1f))
+            RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.weight(1f), scale = 2f)
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { isPlaying = !isPlaying }) {
                     if (isPlaying) {
