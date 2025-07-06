@@ -626,10 +626,18 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
             RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = 8, modifier = Modifier.weight(1f))
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { isPlaying = !isPlaying }) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.ArrowDropDown else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play"
-                    )
+                    if (isPlaying) {
+                        Icon(
+                            painterResource(
+                                id = R.drawable.pause_24px
+                            ), contentDescription = "Pause"
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play"
+                        )
+                    }
                 }
                 Slider(
                     value = currentLayerIndex.toFloat(),
