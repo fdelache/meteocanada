@@ -97,7 +97,14 @@ object MapUtils {
         TileMatrix("17", 16536.491406314068, -34655800.0, 39310000.0, 256, 256, 33331, 37512)
     )
 
-    suspend fun getLatestTimestamp(): String? {
+    data class RadarLayer(
+        val identifier: String,
+        val style: String,
+        val tileMatrixSet: String,
+        val resourceUrlTemplate: String
+    )
+
+    suspend fun getRadarLayers(): List<RadarLayer> {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://meteo.gc.ca/api/map/radar.3978/wmts/1.0.0/WMTSCapabilities.xml")
@@ -106,29 +113,80 @@ object MapUtils {
                 parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
                 parser.setInput(inputStream, null)
 
-                var latestTimestamp: String? = null
-                val timestampRegex = "(\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}Z)".toRegex()
-
+                val layers = mutableListOf<RadarLayer>()
                 var eventType = parser.eventType
+
+                var inLayer = false
+                var inStyle = false
+                var inTileMatrixSetLink = false
+                var currentTag: String? = null
+
+                var identifier: String? = null
+                var style: String? = null
+                var tileMatrixSet: String? = null
+                var resourceUrlTemplate: String? = null
+
                 while (eventType != XmlPullParser.END_DOCUMENT) {
-                    if (eventType == XmlPullParser.START_TAG && (parser.name == "ows:Identifier" || parser.name == "Identifier")) {
-                        val text = parser.nextText()
-                        if (text != null) {
-                            timestampRegex.find(text)?.let {
-                                val timestamp = it.value
-                                if (latestTimestamp == null || timestamp > latestTimestamp) {
-                                    latestTimestamp = timestamp
+                    when (eventType) {
+                        XmlPullParser.START_TAG -> {
+                            currentTag = parser.name
+                            when (currentTag) {
+                                "Layer" -> {
+                                    inLayer = true
+                                    identifier = null
+                                    style = null
+                                    tileMatrixSet = null
+                                    resourceUrlTemplate = null
+                                }
+                                "Style" -> if (inLayer) inStyle = true
+                                "TileMatrixSetLink" -> if (inLayer) inTileMatrixSetLink = true
+                                "ResourceURL" -> {
+                                    if (inLayer) {
+                                        resourceUrlTemplate = parser.getAttributeValue(null, "template")
+                                    }
                                 }
                             }
+                        }
+                        XmlPullParser.TEXT -> {
+                            if (inLayer && parser.text.isNotBlank()) {
+                                val text = parser.text
+                                when (currentTag) {
+                                    "ows:Identifier" -> {
+                                        if (inStyle) {
+                                            style = text
+                                        } else {
+                                            identifier = text
+                                        }
+                                    }
+                                    "TileMatrixSet" -> {
+                                        if (inTileMatrixSetLink) {
+                                            tileMatrixSet = text
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        XmlPullParser.END_TAG -> {
+                            when (parser.name) {
+                                "Layer" -> {
+                                    if (identifier != null && identifier.startsWith("RADAR_1KM_RRAI_14_") && style != null && tileMatrixSet != null && resourceUrlTemplate != null) {
+                                        layers.add(RadarLayer(identifier, style, tileMatrixSet, resourceUrlTemplate))
+                                    }
+                                    inLayer = false
+                                }
+                                "Style" -> inStyle = false
+                                "TileMatrixSetLink" -> inTileMatrixSetLink = false
+                            }
+                            currentTag = null
                         }
                     }
                     eventType = parser.next()
                 }
                 inputStream.close()
-                latestTimestamp
+                layers.sortedBy { it.identifier }
             } catch (e: Exception) {
                 e.printStackTrace()
-                null
+                emptyList()
             }
         }
     }
@@ -187,9 +245,14 @@ object MapUtils {
         return "https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBCT_TXT_3978/MapServer/WMTS/tile/1.0.0/BaseMaps_CBCT_TXT_3978/default/default028mm/$zoom/$y/$x.png"
     }
 
-    fun getRadarMapUrl(timestamp: String, zoom: Int, x: Int, y: Int): String {
+    fun getRadarMapUrl(layer: RadarLayer, zoom: Int, x: Int, y: Int): String {
         val zoomStr = zoom.toString().padStart(2, '0')
-        return "https://meteo.gc.ca/api/map/radar.3978/wmts/RADAR_1KM_RRAI_14_${timestamp}_512/wxo_3978_grid_512/$zoomStr/$x/$y.png"
+        return layer.resourceUrlTemplate
+            .replace("{Style}", layer.style)
+            .replace("{TileMatrixSet}", layer.tileMatrixSet)
+            .replace("{TileMatrix}", zoomStr)
+            .replace("{TileCol}", x.toString())
+            .replace("{TileRow}", y.toString())
     }
 
     data class TileLayoutParams(

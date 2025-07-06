@@ -32,17 +32,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -64,12 +69,14 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.meteocanada.ui.MapUtils
 import com.example.meteocanada.ui.composables.RadarMap
 import com.example.meteocanada.ui.theme.MeteoCanadaTheme
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -80,6 +87,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+
 
 data class WeatherData(
     val location: String,
@@ -590,6 +598,22 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
 
 @Composable
 fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
+    val layers by produceState(initialValue = emptyList()) {
+        value = MapUtils.getRadarLayers()
+    }
+
+    var currentLayerIndex by remember { mutableIntStateOf(0) }
+    var isPlaying by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (true) {
+                delay(100)
+                currentLayerIndex = (currentLayerIndex + 1) % layers.size
+            }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { navController.popBackStack() }) {
@@ -598,6 +622,22 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = stringResource(R.string.radar), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         }
-        RadarMap(lat = lat, lon = lon, zoom = 8, modifier = Modifier.fillMaxSize())
+        if (layers.isNotEmpty()) {
+            RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = 8, modifier = Modifier.weight(1f))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { isPlaying = !isPlaying }) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.ArrowDropDown else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play"
+                    )
+                }
+                Slider(
+                    value = currentLayerIndex.toFloat(),
+                    onValueChange = { currentLayerIndex = it.toInt() },
+                    valueRange = 0f..(layers.size - 1).toFloat(),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     }
 }
