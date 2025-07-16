@@ -1,4 +1,4 @@
-package com.example.meteocanada
+package dev.isalazy.meteocanada
 
 import org.junit.Test
 

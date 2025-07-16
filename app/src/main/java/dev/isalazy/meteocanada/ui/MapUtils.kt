@@ -1,4 +1,4 @@
-package com.example.meteocanada.ui
+package dev.isalazy.meteocanada.ui
 
 import android.util.Xml
 import kotlinx.coroutines.Dispatchers

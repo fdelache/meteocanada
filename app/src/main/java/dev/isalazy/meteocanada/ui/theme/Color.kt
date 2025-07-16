@@ -1,4 +1,4 @@
-package com.example.meteocanada.ui.theme
+package dev.isalazy.meteocanada.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

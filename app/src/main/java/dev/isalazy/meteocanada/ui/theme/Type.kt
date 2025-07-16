@@ -1,4 +1,4 @@
-package com.example.meteocanada.ui.theme
+package dev.isalazy.meteocanada.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

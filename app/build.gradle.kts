@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.meteocanada"
+    namespace = "dev.isalazy.meteocanada"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.meteocanada"
+        applicationId = "dev.isalazy.meteocanada"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

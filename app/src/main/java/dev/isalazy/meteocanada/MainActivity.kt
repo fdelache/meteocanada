@@ -1,4 +1,4 @@
-package com.example.meteocanada
+package dev.isalazy.meteocanada
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -69,9 +69,9 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.meteocanada.ui.MapUtils
-import com.example.meteocanada.ui.composables.RadarMap
-import com.example.meteocanada.ui.theme.MeteoCanadaTheme
+import dev.isalazy.meteocanada.ui.MapUtils
+import dev.isalazy.meteocanada.ui.composables.RadarMap
+import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority

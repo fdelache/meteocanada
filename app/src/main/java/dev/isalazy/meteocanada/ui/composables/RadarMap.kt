@@ -1,4 +1,4 @@
-package com.example.meteocanada.ui.composables
+package dev.isalazy.meteocanada.ui.composables
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Box
@@ -11,8 +11,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import coil3.compose.AsyncImage
-import com.example.meteocanada.ui.MapUtils
-import com.example.meteocanada.ui.MapUtils.RadarLayer
+import dev.isalazy.meteocanada.ui.MapUtils
+import dev.isalazy.meteocanada.ui.MapUtils.RadarLayer
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
