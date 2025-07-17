@@ -108,7 +108,8 @@ data class DailyForecast(
     val temperature: String,
     val iconCode: String,
     val iconUrl: String,
-    val feelsLike: String?
+    val feelsLike: String?,
+    val precip: String
 )
 
 data class HourlyForecast(
@@ -117,7 +118,8 @@ data class HourlyForecast(
     val temperature: String,
     val iconCode: String,
     val iconUrl: String,
-    val feelsLike: String?
+    val feelsLike: String?,
+    val precip: String
 )
 
 class ImageCache(context: Context) {
@@ -313,7 +315,8 @@ class MainActivity : ComponentActivity() {
                     temperature = temperature,
                     iconCode = daily.getString("iconCode"),
                     iconUrl = "https://meteo.gc.ca/weathericons/${daily.getString("iconCode")}.gif",
-                    feelsLike = if (feelsLike != temperature) feelsLike else null
+                    feelsLike = if (feelsLike != temperature) feelsLike else null,
+                    precip = daily.getString("precip")
                 )
             )
         }
@@ -331,7 +334,8 @@ class MainActivity : ComponentActivity() {
                     temperature = temperature,
                     iconCode = hourly.getString("iconCode"),
                     iconUrl = "https://meteo.gc.ca/weathericons/${hourly.getString("iconCode")}.gif",
-                    feelsLike = if (feelsLike != temperature) feelsLike else null
+                    feelsLike = if (feelsLike != temperature) feelsLike else null,
+                    precip = hourly.getString("precip")
                 )
             )
         }
@@ -402,7 +406,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = forecast.date, modifier = Modifier.weight(1f))
-                        Text(text = forecast.summary, modifier = Modifier.weight(2f))
+                        Text(text = "${forecast.summary}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
                         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                             Text(text = "${forecast.temperature}°C")
                             forecast.feelsLike?.let {
@@ -430,7 +434,7 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = forecast.time, modifier = Modifier.weight(1f))
-                        Text(text = forecast.condition, modifier = Modifier.weight(2f))
+                        Text(text = "${forecast.condition}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
                         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                             Text(text = "${forecast.temperature}°C")
                             forecast.feelsLike?.let {
@@ -509,12 +513,12 @@ fun GreetingPreview() {
                 wind = "SW 10 km/h",
                 currentIconUrl = "https://meteo.gc.ca/weathericons/00.gif",
                 dailyForecasts = listOf(
-                    DailyForecast("Mon", "Sunny", "25", "00", "https://meteo.gc.ca/weathericons/00.gif", null),
-                    DailyForecast("Tue", "Rain", "15", "12", "https://meteo.gc.ca/weathericons/12.gif", null)
+                    DailyForecast("Mon", "Sunny", "25", "00", "https://meteo.gc.ca/weathericons/00.gif", null, "0"),
+                    DailyForecast("Tue", "Rain", "15", "12", "https://meteo.gc.ca/weathericons/12.gif", null, "80")
                 ),
                 hourlyForecasts = listOf(
-                    HourlyForecast("10h00", "Sunny", "22", "00", "https://meteo.gc.ca/weathericons/00.gif", null),
-                    HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif", null)
+                    HourlyForecast("10h00", "Sunny", "22", "00", "https://meteo.gc.ca/weathericons/00.gif", null, "0"),
+                    HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif", null, "0")
                 )
             ),
             navController = navController,
