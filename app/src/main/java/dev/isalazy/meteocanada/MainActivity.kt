@@ -5,15 +5,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,7 +41,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +49,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -69,20 +64,17 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import dev.isalazy.meteocanada.ui.MapUtils
-import dev.isalazy.meteocanada.ui.composables.RadarMap
-import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
+import coil3.compose.AsyncImage
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import dev.isalazy.meteocanada.ui.MapUtils
+import dev.isalazy.meteocanada.ui.composables.RadarMap
+import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -122,51 +114,13 @@ data class HourlyForecast(
     val precip: String
 )
 
-class ImageCache(context: Context) {
-    private val inMemoryCache = mutableMapOf<String, Bitmap>()
-    private val diskCacheDir = File(context.cacheDir, "image_cache")
 
-    init {
-        if (!diskCacheDir.exists()) {
-            diskCacheDir.mkdirs()
-        }
-    }
-
-    fun get(url: String): Bitmap? {
-        inMemoryCache[url]?.let {
-            return it
-        }
-
-        val file = File(diskCacheDir, url.hashCode().toString())
-        if (file.exists()) {
-            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-            if (bitmap != null) {
-                inMemoryCache[url] = bitmap
-                return bitmap
-            }
-        }
-
-        return null
-    }
-
-    fun put(url: String, bitmap: Bitmap) {
-        inMemoryCache[url] = bitmap
-        val file = File(diskCacheDir, url.hashCode().toString())
-        try {
-            FileOutputStream(file).use {
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-            }
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
-    }
-}
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val weatherDataState = mutableStateOf<WeatherData?>(null)
-    private lateinit var imageCache: ImageCache
+    
 
     private val requestPermissionLauncher =
         registerForActivityResult(
@@ -183,7 +137,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        imageCache = ImageCache(this)
+        
 
         // Set initial locale based on saved preference
         val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
@@ -203,8 +157,7 @@ class MainActivity : ComponentActivity() {
                         composable("weather") {
                             WeatherScreen(
                                 weatherData = weatherDataState.value,
-                                navController = navController,
-                                imageCache = imageCache
+                                navController = navController
                             )
                         }
                         composable("settings") {
@@ -346,7 +299,7 @@ class MainActivity : ComponentActivity() {
 
 
 @Composable
-fun WeatherScreen(weatherData: WeatherData?, navController: NavController, imageCache: ImageCache, modifier: Modifier = Modifier) {
+fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -365,14 +318,11 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
         if (weatherData != null) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = weatherData.currentIconUrl, imageCache = imageCache)
-                    if (imageBitmap != null) {
-                        Image(
-                            bitmap = imageBitmap.asImageBitmap(),
-                            contentDescription = weatherData.currentCondition,
-                            modifier = Modifier.size(72.dp)
-                        )
-                    }
+                    AsyncImage(
+                        model = weatherData.currentIconUrl,
+                        contentDescription = weatherData.currentCondition,
+                        modifier = Modifier.size(72.dp)
+                    )
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
@@ -396,14 +346,11 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
             items(weatherData.dailyForecasts) { forecast ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl, imageCache = imageCache)
-                        if (imageBitmap != null) {
-                            Image(
-                                bitmap = imageBitmap.asImageBitmap(),
-                                contentDescription = forecast.summary,
-                                modifier = Modifier.size(48.dp)
-                            )
-                        }
+                        AsyncImage(
+                            model = forecast.iconUrl,
+                            contentDescription = forecast.summary,
+                            modifier = Modifier.size(48.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = forecast.date, modifier = Modifier.weight(1f))
                         Text(text = "${forecast.summary}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
@@ -424,14 +371,11 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
             items(weatherData.hourlyForecasts) { forecast ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val imageBitmap: Bitmap? = loadImageBitmap(imageUrl = forecast.iconUrl, imageCache = imageCache)
-                        if (imageBitmap != null) {
-                            Image(
-                                bitmap = imageBitmap.asImageBitmap(),
-                                contentDescription = forecast.condition,
-                                modifier = Modifier.size(48.dp)
-                            )
-                        }
+                        AsyncImage(
+                            model = forecast.iconUrl,
+                            contentDescription = forecast.condition,
+                            modifier = Modifier.size(48.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = forecast.time, modifier = Modifier.weight(1f))
                         Text(text = "${forecast.condition}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
@@ -448,60 +392,13 @@ fun WeatherScreen(weatherData: WeatherData?, navController: NavController, image
     }
 }
 
-@Composable
-fun loadImageBitmap(imageUrl: String, imageCache: ImageCache): Bitmap? {
-    val bitmapState: State<Bitmap?> = produceState(initialValue = imageCache.get(imageUrl), imageUrl) {
-        if (value == null) {
-            value = try {
-                withContext(Dispatchers.IO) {
-                    val url = URL(imageUrl)
-                    var connection: HttpURLConnection? = null
-                    var inputStream: java.io.InputStream? = null
-                    try {
-                        connection = url.openConnection() as HttpURLConnection
-                        connection.doInput = true
-                        connection.connect()
-                        val responseCode = connection.responseCode
-                        if (responseCode == HttpURLConnection.HTTP_OK) {
-                            inputStream = connection.inputStream
-                            if (inputStream != null) {
-                                val bufferedInputStream = java.io.BufferedInputStream(inputStream)
-                                val bitmap = BitmapFactory.decodeStream(bufferedInputStream)
-                                if (bitmap != null) {
-                                    imageCache.put(imageUrl, bitmap)
-                                } else {
-                                    Log.e("ImageLoader", "BitmapFactory.decodeStream returned null for $imageUrl")
-                                }
-                                bitmap
-                            } else {
-                                Log.e("ImageLoader", "Input stream is null for $imageUrl")
-                                null
-                            }
-                        } else {
-                            Log.e("ImageLoader", "HTTP error code: $responseCode, message: ${connection.responseMessage} for $imageUrl")
-                            null
-                        }
-                    } finally {
-                        inputStream?.close()
-                        connection?.disconnect()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("ImageLoader", "Failed to load image from $imageUrl: ${e.message}", e)
-                null
-            }
-        }
-    }
-    return bitmapState.value
-}
+
 
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     MeteoCanadaTheme {
         val navController = rememberNavController()
-        val context = LocalContext.current
-        val imageCache = remember { ImageCache(context) }
         WeatherScreen(
             weatherData = WeatherData(
                 location = "Montreal",
@@ -521,8 +418,7 @@ fun GreetingPreview() {
                     HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif", null, "0")
                 )
             ),
-            navController = navController,
-            imageCache = imageCache
+            navController = navController
         )
     }
 }
