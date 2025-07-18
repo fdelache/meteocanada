@@ -268,7 +268,7 @@ class MainActivity : ComponentActivity() {
                     temperature = temperature,
                     iconCode = daily.getString("iconCode"),
                     iconUrl = "https://meteo.gc.ca/weathericons/${daily.getString("iconCode")}.gif",
-                    feelsLike = if (feelsLike != temperature) feelsLike else null,
+                    feelsLike = if (feelsLike != temperature && !feelsLike.isNullOrBlank()) feelsLike else null,
                     precip = daily.getString("precip")
                 )
             )
@@ -287,13 +287,13 @@ class MainActivity : ComponentActivity() {
                     temperature = temperature,
                     iconCode = hourly.getString("iconCode"),
                     iconUrl = "https://meteo.gc.ca/weathericons/${hourly.getString("iconCode")}.gif",
-                    feelsLike = if (feelsLike != temperature) feelsLike else null,
+                    feelsLike = if (feelsLike != temperature && !feelsLike.isNullOrBlank()) feelsLike else null,
                     precip = hourly.getString("precip")
                 )
             )
         }
 
-        return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
+        return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature && !currentFeelsLike.isNullOrBlank()) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
     }
 }
 
