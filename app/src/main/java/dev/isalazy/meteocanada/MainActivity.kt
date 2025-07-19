@@ -79,7 +79,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 data class WeatherData(
     val location: String,
@@ -114,8 +114,6 @@ data class HourlyForecast(
     val precip: String
 )
 
-
-
 class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -135,6 +133,7 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
