@@ -11,6 +11,8 @@ class UserPreferences(context: Context) {
     companion object {
         const val KEY_LATITUDE = "latitude"
         const val KEY_LONGITUDE = "longitude"
+        const val KEY_APP_LANGUAGE = "app_language"
+        const val KEY_DARK_MODE = "dark_mode"
 
         // Montreal's coordinates
         const val MONTREAL_LAT = 45.5017f
@@ -37,4 +39,16 @@ class UserPreferences(context: Context) {
     fun isLocationSet(): Boolean {
         return preferences.contains(KEY_LATITUDE) && preferences.contains(KEY_LONGITUDE)
     }
+
+    var appLanguage: String
+        get() = preferences.getString(KEY_APP_LANGUAGE, "en") ?: "en"
+        set(value) {
+            preferences.edit { putString(KEY_APP_LANGUAGE, value) }
+        }
+
+    var isDarkMode: Boolean
+        get() = preferences.getBoolean(KEY_DARK_MODE, false)
+        set(value) {
+            preferences.edit { putBoolean(KEY_DARK_MODE, value) }
+        }
 }

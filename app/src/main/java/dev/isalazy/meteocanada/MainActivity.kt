@@ -57,7 +57,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import androidx.core.os.ConfigurationCompat
 import androidx.core.os.LocaleListCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -144,14 +143,11 @@ class MainActivity : ComponentActivity() {
         userPreferences = UserPreferences(this)
 
         // Set initial locale based on saved preference
-        val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        val lang = sharedPrefs.getString("app_language", "en") ?: "en"
-        val isDarkMode = sharedPrefs.getBoolean("dark_mode", false)
-        setLocale(lang)
+        setLocale(userPreferences.appLanguage)
 
         enableEdgeToEdge()
         setContent {
-            MeteoCanadaTheme(darkTheme = isDarkMode) {
+            MeteoCanadaTheme(darkTheme = userPreferences.isDarkMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = androidx.compose.material3.MaterialTheme.colorScheme.background
@@ -203,8 +199,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun attachBaseContext(newBase: Context?) {
-        val sharedPrefs = newBase?.getSharedPreferences("app_prefs", MODE_PRIVATE)
-        val lang = sharedPrefs?.getString("app_language", "en") ?: "en"
+        val prefs = newBase?.getSharedPreferences("meteo_canada_prefs", MODE_PRIVATE)
+        val lang = prefs?.getString("app_language", "en") ?: "en"
         val locale = LocaleListCompat.forLanguageTags(lang)
         val config = Configuration(newBase?.resources?.configuration)
         ConfigurationCompat.setLocales(config, locale)
@@ -239,8 +235,7 @@ class MainActivity : ComponentActivity() {
     private fun fetchWeather(latitude: Double, longitude: Double, isRetry: Boolean = false) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
-                val lang = sharedPrefs.getString("app_language", "en") ?: "en"
+                val lang = userPreferences.appLanguage
                 val url = URL("https://meteo.gc.ca/api/app/v3/$lang/Location/$latitude,$longitude?type=city")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
@@ -486,9 +481,9 @@ fun GreetingPreview() {
 @Composable
 fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
     val context = LocalContext.current
-    val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    var selectedLanguage by remember { mutableStateOf(sharedPrefs.getString("app_language", "en")) }
-    var isDarkMode by remember { mutableStateOf(sharedPrefs.getBoolean("dark_mode", false)) }
+    val userPreferences = remember { UserPreferences(context) }
+    var selectedLanguage by remember { mutableStateOf(userPreferences.appLanguage) }
+    var isDarkMode by remember { mutableStateOf(userPreferences.isDarkMode) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -504,7 +499,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable { 
                 selectedLanguage = "en"
-                sharedPrefs.edit { putString("app_language", "en") }
+                userPreferences.appLanguage = "en"
                 onLanguageChange()
             },
             verticalAlignment = Alignment.CenterVertically
@@ -513,7 +508,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                 selected = selectedLanguage == "en",
                 onClick = { 
                     selectedLanguage = "en"
-                    sharedPrefs.edit { putString("app_language", "en") }
+                    userPreferences.appLanguage = "en"
                     onLanguageChange()
                 }
             )
@@ -522,7 +517,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable { 
                 selectedLanguage = "fr"
-                sharedPrefs.edit { putString("app_language", "fr") }
+                userPreferences.appLanguage = "fr"
                 onLanguageChange()
             },
             verticalAlignment = Alignment.CenterVertically
@@ -531,7 +526,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                 selected = selectedLanguage == "fr",
                 onClick = { 
                     selectedLanguage = "fr"
-                    sharedPrefs.edit { putString("app_language", "fr") }
+                    userPreferences.appLanguage = "fr"
                     onLanguageChange()
                 }
             )
@@ -548,7 +543,7 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
                 checked = isDarkMode,
                 onCheckedChange = {
                     isDarkMode = it
-                    sharedPrefs.edit { putBoolean("dark_mode", it) }
+                    userPreferences.isDarkMode = it
                     onLanguageChange() // Trigger theme change
                 }
             )
