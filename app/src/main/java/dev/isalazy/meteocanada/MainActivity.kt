@@ -3,7 +3,6 @@ package dev.isalazy.meteocanada
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
@@ -31,6 +30,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,10 +57,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.os.ConfigurationCompat
 import androidx.core.os.LocaleListCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -68,6 +70,10 @@ import coil3.compose.AsyncImage
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import dev.isalazy.meteocanada.UserPreferences.Companion.MONTREAL_LAT
+import dev.isalazy.meteocanada.UserPreferences.Companion.MONTREAL_LON
+import dev.isalazy.meteocanada.UserPreferences.Companion.TORONTO_LAT
+import dev.isalazy.meteocanada.UserPreferences.Companion.TORONTO_LON
 import dev.isalazy.meteocanada.ui.MapUtils
 import dev.isalazy.meteocanada.ui.composables.RadarMap
 import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
@@ -79,7 +85,6 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 data class WeatherData(
     val location: String,
@@ -118,9 +123,9 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val weatherDataState = mutableStateOf<WeatherData?>(null)
-    
+    private lateinit var userPreferences: UserPreferences
 
-    private val requestPermissionLauncher =
+    private val requestPermissionLauncher = 
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
@@ -136,7 +141,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        
+        userPreferences = UserPreferences(this)
 
         // Set initial locale based on saved preference
         val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
@@ -156,7 +161,22 @@ class MainActivity : ComponentActivity() {
                         composable("weather") {
                             WeatherScreen(
                                 weatherData = weatherDataState.value,
-                                navController = navController
+                                navController = navController,
+                                onLocationSelected = { location ->
+                                    when (location) {
+                                        "montreal" -> {
+                                            userPreferences.setLocation(MONTREAL_LAT, MONTREAL_LON)
+                                            fetchWeather(MONTREAL_LAT.toDouble(), MONTREAL_LON.toDouble())
+                                        }
+                                        "toronto" -> {
+                                            userPreferences.setLocation(TORONTO_LAT, TORONTO_LON)
+                                            fetchWeather(TORONTO_LAT.toDouble(), TORONTO_LON.toDouble())
+                                        }
+                                        "detect" -> {
+                                            requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                        }
+                                    }
+                                }
                             )
                         }
                         composable("settings") {
@@ -174,16 +194,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        when {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                getLocation()
-            }
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-            }
+        if (userPreferences.isLocationSet()) {
+            val (lat, lon) = userPreferences.getLocation()
+            fetchWeather(lat.toDouble(), lon.toDouble())
+        } else {
+            fetchWeather(MONTREAL_LAT.toDouble(), MONTREAL_LON.toDouble())
         }
     }
 
@@ -208,6 +223,7 @@ class MainActivity : ComponentActivity() {
             .addOnSuccessListener { location ->
                 if (location != null) {
                     Log.d("LocationData", "Location received: ${location.latitude}, ${location.longitude}")
+                    userPreferences.setLocation(location.latitude.toFloat(), location.longitude.toFloat())
                     fetchWeather(location.latitude, location.longitude)
                 } else {
                     Log.e("LocationData", "Location not found: FusedLocationProviderClient returned null")
@@ -298,14 +314,58 @@ class MainActivity : ComponentActivity() {
 
 
 @Composable
-fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modifier: Modifier = Modifier) {
+fun WeatherScreen(weatherData: WeatherData?, navController: NavController, onLocationSelected: (String) -> Unit, modifier: Modifier = Modifier) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.select_location)) },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        onLocationSelected("montreal")
+                        showDialog = false
+                    }) {
+                        Text(stringResource(R.string.montreal))
+                    }
+                    TextButton(onClick = {
+                        onLocationSelected("toronto")
+                        showDialog = false
+                    }) {
+                        Text(stringResource(R.string.toronto))
+                    }
+                    TextButton(onClick = {
+                        onLocationSelected("detect")
+                        showDialog = false
+                    }) {
+                        Text(stringResource(R.string.detect_my_location))
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
     LazyColumn(modifier = modifier.padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                weatherData?.let {
-                    Text(text = stringResource(R.string.location, it.location), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-                } ?: run {
-                    Text(text = stringResource(id = R.string.loading_weather_data), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    weatherData?.let {
+                        Text(text = stringResource(R.string.location, it.location), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                    } ?: run {
+                        Text(text = stringResource(id = R.string.loading_weather_data), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                    }
+                    IconButton(onClick = { showDialog = true }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.edit_24px),
+                            contentDescription = stringResource(R.string.select_location)
+                        )
+                    }
                 }
                 IconButton(onClick = { navController.navigate("settings") }) {
                     Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -417,7 +477,8 @@ fun GreetingPreview() {
                     HourlyForecast("11h00", "Sunny", "23", "00", "https://meteo.gc.ca/weathericons/00.gif", null, "0")
                 )
             ),
-            navController = navController
+            navController = navController,
+            onLocationSelected = {}
         )
     }
 }

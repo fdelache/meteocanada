@@ -11,4 +11,10 @@
     <string name="back">Back</string>
     <string name="settings">Settings</string>
     <string name="radar">Radar</string>
+    <string name="select_location">Select Location</string>
+    <string name="montreal">Montreal</string>
+    <string name="toronto">Toronto</string>
+    <string name="detect_my_location">Detect my current location</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
 </resources>

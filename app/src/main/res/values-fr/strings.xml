@@ -11,4 +11,10 @@
     <string name="back">Retour</string>
     <string name="settings">Paramètres</string>
     <string name="radar">Radar</string>
+    <string name="select_location">Sélectionner un lieu</string>
+    <string name="montreal">Montréal</string>
+    <string name="toronto">Toronto</string>
+    <string name="detect_my_location">Détecter ma position actuelle</string>
+    <string name="play">Jouer</string>
+    <string name="pause">Pause</string>
 </resources>
