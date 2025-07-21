@@ -30,11 +30,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -48,6 +47,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
@@ -77,6 +78,7 @@ import dev.isalazy.meteocanada.ui.MapUtils
 import dev.isalazy.meteocanada.ui.composables.RadarMap
 import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
@@ -84,6 +86,8 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+
+data class CitySearchResult(val displayName: String, val lat: Double, val lon: Double)
 
 data class WeatherData(
     val location: String,
@@ -157,6 +161,15 @@ class MainActivity : ComponentActivity() {
                         composable("weather") {
                             WeatherScreen(
                                 weatherData = weatherDataState.value,
+                                navController = navController
+                            )
+                        }
+                        composable("settings") {
+                            val searchResults = remember { mutableStateOf(emptyList<CitySearchResult>()) }
+                            val coroutineScope = rememberCoroutineScope()
+                            var searchJob by remember { mutableStateOf<Job?>(null) }
+
+                            SettingsScreen(
                                 navController = navController,
                                 onLocationSelected = { location ->
                                     when (location) {
@@ -172,13 +185,23 @@ class MainActivity : ComponentActivity() {
                                             requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
                                         }
                                     }
-                                }
+                                },
+                                onCitySelected = {
+                                    userPreferences.setLocation(it.lat.toFloat(), it.lon.toFloat())
+                                    fetchWeather(it.lat, it.lon)
+                                },
+                                onSearchQueryChanged = {
+                                    searchJob?.cancel()
+                                    searchJob = coroutineScope.launch {
+                                        delay(300) // Debounce
+                                        searchCities(it) { results ->
+                                            searchResults.value = results
+                                        }
+                                    }
+                                },
+                                searchResults = searchResults.value,
+                                onLanguageChange = { recreate() }
                             )
-                        }
-                        composable("settings") {
-                            SettingsScreen(navController = navController) {
-                                recreate()
-                            }
                         }
                         composable("radar") {
                             weatherDataState.value?.let {
@@ -305,61 +328,58 @@ class MainActivity : ComponentActivity() {
 
         return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature && !currentFeelsLike.isNullOrBlank()) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
     }
+
+    private fun searchCities(query: String, callback: (List<CitySearchResult>) -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val lang = userPreferences.appLanguage
+                val url = URL("https://meteo.gc.ca/api/accesscity/$lang?query=$query&limit=50")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                val cities = parseCitySearchResponse(response)
+                callback(cities)
+            } catch (e: Exception) {
+                Log.e("CitySearch", "Failed to search for cities: ${e.message}", e)
+                callback(emptyList())
+            }
+        }
+    }
+
+    private fun parseCitySearchResponse(json: String): List<CitySearchResult> {
+        val results = mutableListOf<CitySearchResult>()
+        val jsonArray = org.json.JSONArray(json)
+        for (i in 0 until jsonArray.length()) {
+            val jsonObject = jsonArray.getJSONObject(i)
+            results.add(
+                CitySearchResult(
+                    displayName = jsonObject.getString("display_name"),
+                    lat = jsonObject.getDouble("lat"),
+                    lon = jsonObject.getDouble("lon")
+                )
+            )
+        }
+        return results
+    }
 }
 
 
 @Composable
-fun WeatherScreen(weatherData: WeatherData?, navController: NavController, onLocationSelected: (String) -> Unit, modifier: Modifier = Modifier) {
-    var showDialog by remember { mutableStateOf(false) }
-
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text(stringResource(R.string.select_location)) },
-            text = {
-                Column {
-                    TextButton(onClick = {
-                        onLocationSelected("montreal")
-                        showDialog = false
-                    }) {
-                        Text(stringResource(R.string.montreal))
-                    }
-                    TextButton(onClick = {
-                        onLocationSelected("toronto")
-                        showDialog = false
-                    }) {
-                        Text(stringResource(R.string.toronto))
-                    }
-                    TextButton(onClick = {
-                        onLocationSelected("detect")
-                        showDialog = false
-                    }) {
-                        Text(stringResource(R.string.detect_my_location))
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = { showDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            }
-        )
-    }
-
+fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     weatherData?.let {
-                        Text(text = stringResource(R.string.location, it.location), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                        Text(
+                            text = stringResource(R.string.location, it.location),
+                            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     } ?: run {
                         Text(text = stringResource(id = R.string.loading_weather_data), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-                    }
-                    IconButton(onClick = { showDialog = true }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.edit_24px),
-                            contentDescription = stringResource(R.string.select_location)
-                        )
                     }
                 }
                 IconButton(onClick = { navController.navigate("settings") }) {
@@ -473,17 +493,24 @@ fun GreetingPreview() {
                 )
             ),
             navController = navController,
-            onLocationSelected = {}
         )
     }
 }
 
 @Composable
-fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
+fun SettingsScreen(
+    navController: NavController,
+    onLocationSelected: (String) -> Unit,
+    onCitySelected: (CitySearchResult) -> Unit,
+    onSearchQueryChanged: (String) -> Unit,
+    searchResults: List<CitySearchResult>,
+    onLanguageChange: () -> Unit
+) {
     val context = LocalContext.current
     val userPreferences = remember { UserPreferences(context) }
     var selectedLanguage by remember { mutableStateOf(userPreferences.appLanguage) }
     var isDarkMode by remember { mutableStateOf(userPreferences.isDarkMode) }
+    var searchQuery by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -492,6 +519,44 @@ fun SettingsScreen(navController: NavController, onLanguageChange: () -> Unit) {
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = stringResource(R.string.settings), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = stringResource(R.string.select_location), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = {
+                searchQuery = it
+                onSearchQueryChanged(it)
+            },
+            label = { Text("Search for a city") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyColumn {
+            items(searchResults) {
+                TextButton(onClick = {
+                    onCitySelected(it)
+                }) {
+                    Text(it.displayName)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = {
+            onLocationSelected("montreal")
+        }) {
+            Text(stringResource(R.string.montreal))
+        }
+        TextButton(onClick = {
+            onLocationSelected("toronto")
+        }) {
+            Text(stringResource(R.string.toronto))
+        }
+        TextButton(onClick = {
+            onLocationSelected("detect")
+        }) {
+            Text(stringResource(R.string.detect_my_location))
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = stringResource(R.string.select_language), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)

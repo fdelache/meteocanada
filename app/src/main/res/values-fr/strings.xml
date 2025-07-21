@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Meteo Canada</string>
     <string name="loading_weather_data">Chargement des données météorologiques…</string>
-    <string name="location">Lieu: %1$s</string>
+    <string name="location">%1$s</string>
     <string name="current_conditions">Conditions actuelles</string>
     <string name="wind">Vent: %1$s</string>
     <string name="daily_forecast">Prévisions quotidiennes</string>
