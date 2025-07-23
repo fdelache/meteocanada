@@ -15,6 +15,7 @@
     <string name="montreal">Montreal</string>
     <string name="toronto">Toronto</string>
     <string name="detect_my_location">Detect my current location</string>
+    <string name="select_a_city_manually">Select a city manually</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
 </resources>

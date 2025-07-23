@@ -173,14 +173,6 @@ class MainActivity : ComponentActivity() {
                                 navController = navController,
                                 onLocationSelected = { location ->
                                     when (location) {
-                                        "montreal" -> {
-                                            userPreferences.setLocation(MONTREAL_LAT, MONTREAL_LON)
-                                            fetchWeather(MONTREAL_LAT.toDouble(), MONTREAL_LON.toDouble())
-                                        }
-                                        "toronto" -> {
-                                            userPreferences.setLocation(TORONTO_LAT, TORONTO_LON)
-                                            fetchWeather(TORONTO_LAT.toDouble(), TORONTO_LON.toDouble())
-                                        }
                                         "detect" -> {
                                             requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
                                         }
@@ -213,7 +205,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        if (userPreferences.isLocationSet()) {
+        if (userPreferences.locationMode == "detect") {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        } else if (userPreferences.isLocationSet()) {
             val (lat, lon) = userPreferences.getLocation()
             fetchWeather(lat.toDouble(), lon.toDouble())
         } else {
@@ -511,6 +505,7 @@ fun SettingsScreen(
     var selectedLanguage by remember { mutableStateOf(userPreferences.appLanguage) }
     var isDarkMode by remember { mutableStateOf(userPreferences.isDarkMode) }
     var searchQuery by remember { mutableStateOf("") }
+    var locationMode by remember { mutableStateOf(userPreferences.locationMode) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -521,48 +516,10 @@ fun SettingsScreen(
             Text(text = stringResource(R.string.settings), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Text(text = stringResource(R.string.select_location), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = {
-                searchQuery = it
-                onSearchQueryChanged(it)
-            },
-            label = { Text("Search for a city") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        LazyColumn {
-            items(searchResults) {
-                TextButton(onClick = {
-                    onCitySelected(it)
-                }) {
-                    Text(it.displayName)
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        TextButton(onClick = {
-            onLocationSelected("montreal")
-        }) {
-            Text(stringResource(R.string.montreal))
-        }
-        TextButton(onClick = {
-            onLocationSelected("toronto")
-        }) {
-            Text(stringResource(R.string.toronto))
-        }
-        TextButton(onClick = {
-            onLocationSelected("detect")
-        }) {
-            Text(stringResource(R.string.detect_my_location))
-        }
-        Spacer(modifier = Modifier.height(16.dp))
         Text(text = stringResource(R.string.select_language), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { 
+            modifier = Modifier.fillMaxWidth().clickable {
                 selectedLanguage = "en"
                 userPreferences.appLanguage = "en"
                 onLanguageChange()
@@ -571,7 +528,7 @@ fun SettingsScreen(
         ) {
             RadioButton(
                 selected = selectedLanguage == "en",
-                onClick = { 
+                onClick = {
                     selectedLanguage = "en"
                     userPreferences.appLanguage = "en"
                     onLanguageChange()
@@ -580,7 +537,7 @@ fun SettingsScreen(
             Text("English")
         }
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { 
+            modifier = Modifier.fillMaxWidth().clickable {
                 selectedLanguage = "fr"
                 userPreferences.appLanguage = "fr"
                 onLanguageChange()
@@ -589,7 +546,7 @@ fun SettingsScreen(
         ) {
             RadioButton(
                 selected = selectedLanguage == "fr",
-                onClick = { 
+                onClick = {
                     selectedLanguage = "fr"
                     userPreferences.appLanguage = "fr"
                     onLanguageChange()
@@ -612,6 +569,59 @@ fun SettingsScreen(
                     onLanguageChange() // Trigger theme change
                 }
             )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = stringResource(R.string.select_location), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth().clickable {
+            locationMode = "detect"
+            userPreferences.locationMode = "detect"
+            onLocationSelected("detect")
+        }, verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(
+                selected = locationMode == "detect",
+                onClick = { 
+                    locationMode = "detect"
+                    userPreferences.locationMode = "detect"
+                    onLocationSelected("detect")
+                }
+            )
+            Text(stringResource(R.string.detect_my_location))
+        }
+        Row(modifier = Modifier.fillMaxWidth().clickable {
+            locationMode = "manual"
+            userPreferences.locationMode = "manual"
+        }, verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(
+                selected = locationMode == "manual",
+                onClick = { 
+                    locationMode = "manual"
+                    userPreferences.locationMode = "manual"
+                }
+            )
+            Text(stringResource(R.string.select_a_city_manually))
+        }
+        if (locationMode == "manual") {
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                    onSearchQueryChanged(it)
+                },
+                label = { Text("Search for a city") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyColumn {
+                items(searchResults) {
+                    TextButton(onClick = {
+                        onCitySelected(it)
+                    }) {
+                        Text(it.displayName)
+                    }
+                }
+            }
         }
     }
 }
