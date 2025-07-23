@@ -72,8 +72,6 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import dev.isalazy.meteocanada.UserPreferences.Companion.MONTREAL_LAT
 import dev.isalazy.meteocanada.UserPreferences.Companion.MONTREAL_LON
-import dev.isalazy.meteocanada.UserPreferences.Companion.TORONTO_LAT
-import dev.isalazy.meteocanada.UserPreferences.Companion.TORONTO_LON
 import dev.isalazy.meteocanada.ui.MapUtils
 import dev.isalazy.meteocanada.ui.composables.RadarMap
 import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
@@ -179,7 +177,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 onCitySelected = {
-                                    userPreferences.setLocation(it.lat.toFloat(), it.lon.toFloat())
+                                    userPreferences.setLocation(it.lat.toFloat(), it.lon.toFloat(), it.displayName)
                                     fetchWeather(it.lat, it.lon)
                                 },
                                 onSearchQueryChanged = {
@@ -506,6 +504,8 @@ fun SettingsScreen(
     var isDarkMode by remember { mutableStateOf(userPreferences.isDarkMode) }
     var searchQuery by remember { mutableStateOf("") }
     var locationMode by remember { mutableStateOf(userPreferences.locationMode) }
+    var locationName by remember { mutableStateOf(userPreferences.locationName) }
+    var isSearching by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -602,23 +602,42 @@ fun SettingsScreen(
             Text(stringResource(R.string.select_a_city_manually))
         }
         if (locationMode == "manual") {
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    onSearchQueryChanged(it)
-                },
-                label = { Text("Search for a city") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyColumn {
-                items(searchResults) {
-                    TextButton(onClick = {
-                        onCitySelected(it)
-                    }) {
-                        Text(it.displayName)
+            if (locationName != null && !isSearching) {
+                Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        text = locationName ?: "",
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    TextButton(onClick = { isSearching = true }) {
+                        Text("Change")
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        onSearchQueryChanged(it)
+                    },
+                    label = { Text("Search for a city") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(searchResults) {
+                        Row(modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onCitySelected(it)
+                                locationName = it.displayName
+                                isSearching = false
+                            }
+                            .padding(vertical = 12.dp)) {
+                            Text(it.displayName)
+                        }
                     }
                 }
             }

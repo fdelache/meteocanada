@@ -14,14 +14,11 @@ class UserPreferences(context: Context) {
         const val KEY_APP_LANGUAGE = "app_language"
         const val KEY_DARK_MODE = "dark_mode"
         const val KEY_LOCATION_MODE = "location_mode"
+        const val KEY_LOCATION_NAME = "location_name"
 
         // Montreal's coordinates
         const val MONTREAL_LAT = 45.5017f
         const val MONTREAL_LON = -73.5673f
-
-        // Toronto's coordinates
-        const val TORONTO_LAT = 43.6532f
-        const val TORONTO_LON = -79.3832f
     }
 
     fun getLocation(): Pair<Float, Float> {
@@ -30,10 +27,11 @@ class UserPreferences(context: Context) {
         return Pair(lat, lon)
     }
 
-    fun setLocation(latitude: Float, longitude: Float) {
+    fun setLocation(latitude: Float, longitude: Float, name: String? = null) {
         preferences.edit {
             putFloat(KEY_LATITUDE, latitude)
-                .putFloat(KEY_LONGITUDE, longitude)
+            putFloat(KEY_LONGITUDE, longitude)
+            name?.let { putString(KEY_LOCATION_NAME, it) }
         }
     }
 
@@ -56,6 +54,23 @@ class UserPreferences(context: Context) {
     var locationMode: String
         get() = preferences.getString(KEY_LOCATION_MODE, "detect") ?: "detect"
         set(value) {
-            preferences.edit { putString(KEY_LOCATION_MODE, value) }
+            preferences.edit {
+                putString(KEY_LOCATION_MODE, value)
+                if (value == "detect") {
+                    remove(KEY_LOCATION_NAME)
+                }
+            }
+        }
+
+    var locationName: String?
+        get() = preferences.getString(KEY_LOCATION_NAME, null)
+        set(value) {
+            preferences.edit {
+                if (value == null) {
+                    remove(KEY_LOCATION_NAME)
+                } else {
+                    putString(KEY_LOCATION_NAME, value)
+                }
+            }
         }
 }
