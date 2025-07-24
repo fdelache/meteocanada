@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,7 +70,9 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import coil3.ImageLoader
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -79,6 +83,9 @@ import dev.isalazy.meteocanada.ui.composables.RadarMap
 import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
@@ -681,20 +688,29 @@ fun SettingsScreen(
 
 @Composable
 fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
+    val context = LocalContext.current
     val layers by produceState(initialValue = emptyList()) {
         value = MapUtils.getRadarLayers()
     }
 
     val screenWidthPx = LocalWindowInfo.current.containerSize.width
+    val screenHeightPx = LocalWindowInfo.current.containerSize.height
+
     val optimalZoom = remember(screenWidthPx) {
         MapUtils.getOptimalZoomForWidth(screenWidthPx, 50.0)
     }
 
     var currentLayerIndex by remember { mutableIntStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
+    var isPreFetching by remember { mutableStateOf(true) }
 
-    LaunchedEffect(layers) {
+    rememberCoroutineScope()
+
+    LaunchedEffect(layers, optimalZoom, screenWidthPx, screenHeightPx) {
         if (layers.isNotEmpty()) {
+            isPreFetching = true
+            preFetchRadarTiles(context, layers, lat, lon, optimalZoom, screenWidthPx, screenHeightPx)
+            isPreFetching = false
             currentLayerIndex = layers.size - 1
         }
     }
@@ -718,10 +734,14 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = stringResource(R.string.radar), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         }
-        if (layers.isNotEmpty()) {
+        if (isPreFetching) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (layers.isNotEmpty()) {
             RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.weight(1f), scale = 2f)
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { isPlaying = !isPlaying }) {
+                IconButton(onClick = { isPlaying = !isPlaying }, enabled = !isPreFetching) {
                     if (isPlaying) {
                         Icon(
                             painterResource(
@@ -739,9 +759,43 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
                     value = currentLayerIndex.toFloat(),
                     onValueChange = { currentLayerIndex = it.toInt() },
                     valueRange = 0f..(layers.size - 1).toFloat(),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isPreFetching
                 )
             }
         }
+    }
+}
+
+suspend fun preFetchRadarTiles(
+    context: Context,
+    layers: List<MapUtils.RadarLayer>,
+    lat: Double,
+    lon: Double,
+    zoom: Int,
+    widthPx: Int,
+    heightPx: Int
+) {
+    val imageLoader = ImageLoader(context)
+    val requests = mutableListOf<ImageRequest>()
+
+    val projectedBounds = MapUtils.getProjectedBounds(lat, lon, zoom, widthPx, heightPx)
+    val (radarMinX, radarMinY, radarMaxX, radarMaxY) = MapUtils.getTileCoordinatesForBounds(projectedBounds, zoom, "radar")
+
+    for (layer in layers) {
+        for (y in radarMinY..radarMaxY) {
+            for (x in radarMinX..radarMaxX) {
+                val url = MapUtils.getRadarMapUrl(layer, zoom, x, y)
+                requests.add(ImageRequest.Builder(context).data(url).build())
+            }
+        }
+    }
+
+    coroutineScope { 
+        requests.map { 
+            async { 
+                imageLoader.execute(it) 
+            }
+        }.awaitAll()
     }
 }
