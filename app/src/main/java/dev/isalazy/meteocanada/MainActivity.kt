@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -124,9 +126,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val weatherDataState = mutableStateOf<WeatherData?>(null)
+    private var isRefreshing by mutableStateOf(false)
     private lateinit var userPreferences: UserPreferences
 
-    private val requestPermissionLauncher = 
+    private val requestPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
@@ -159,7 +162,9 @@ class MainActivity : ComponentActivity() {
                         composable("weather") {
                             WeatherScreen(
                                 weatherData = weatherDataState.value,
-                                navController = navController
+                                navController = navController,
+                                isRefreshing = isRefreshing,
+                                onRefresh = { refreshWeather() }
                             )
                         }
                         composable("settings") {
@@ -247,6 +252,18 @@ class MainActivity : ComponentActivity() {
             }
     }
 
+    private fun refreshWeather() {
+        isRefreshing = true
+        if (userPreferences.locationMode == "detect") {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        } else if (userPreferences.isLocationSet()) {
+            val (lat, lon) = userPreferences.getLocation()
+            fetchWeather(lat.toDouble(), lon.toDouble())
+        } else {
+            fetchWeather(MONTREAL_LAT.toDouble(), MONTREAL_LON.toDouble())
+        }
+    }
+
     private fun fetchWeather(latitude: Double, longitude: Double, isRetry: Boolean = false) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -265,6 +282,8 @@ class MainActivity : ComponentActivity() {
                     Log.d("WeatherData", "Retrying with fallback location 45.529, -73.562")
                     fetchWeather(45.529, -73.562, true)
                 }
+            } finally {
+                isRefreshing = false
             }
         }
     }
@@ -357,98 +376,111 @@ class MainActivity : ComponentActivity() {
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WeatherScreen(weatherData: WeatherData?, navController: NavController, modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier.padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    weatherData?.let {
-                        Text(
-                            text = stringResource(R.string.location, it.location),
-                            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    } ?: run {
-                        Text(text = stringResource(id = R.string.loading_weather_data), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-                    }
-                }
-                IconButton(onClick = { navController.navigate("settings") }) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        if (weatherData != null) {
+fun WeatherScreen(
+    weatherData: WeatherData?,
+    navController: NavController,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        modifier = modifier
+    ) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    AsyncImage(
-                        model = weatherData.currentIconUrl,
-                        contentDescription = weatherData.currentCondition,
-                        modifier = Modifier.size(72.dp)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-                        Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
-                        Text(text = stringResource(R.string.wind, weatherData.wind))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        weatherData?.let {
+                            Text(
+                                text = stringResource(R.string.location, it.location),
+                                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } ?: run {
+                            Text(text = stringResource(id = R.string.loading_weather_data), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                        }
                     }
-                    IconButton(onClick = { navController.navigate("radar") }) {
-                        Icon(
-                            painterResource(
-                                id = R.drawable.map_24px
-                            ), contentDescription = stringResource(R.string.radar)
-                        )
+                    IconButton(onClick = { navController.navigate("settings") }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            item {
-                Text(text = stringResource(R.string.daily_forecast), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-            }
-            items(weatherData.dailyForecasts) { forecast ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (weatherData != null) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         AsyncImage(
-                            model = forecast.iconUrl,
-                            contentDescription = forecast.summary,
-                            modifier = Modifier.size(48.dp)
+                            model = weatherData.currentIconUrl,
+                            contentDescription = weatherData.currentCondition,
+                            modifier = Modifier.size(72.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = forecast.date, modifier = Modifier.weight(1f))
-                        Text(text = "${forecast.summary}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Text(text = "${forecast.temperature}°C")
-                            forecast.feelsLike?.let {
-                                Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+                            Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
+                            Text(text = stringResource(R.string.wind, weatherData.wind))
+                        }
+                        IconButton(onClick = { navController.navigate("radar") }) {
+                            Icon(
+                                painterResource(
+                                    id = R.drawable.map_24px
+                                ), contentDescription = stringResource(R.string.radar)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                item {
+                    Text(text = stringResource(R.string.daily_forecast), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+                }
+                items(weatherData.dailyForecasts) { forecast ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(
+                                model = forecast.iconUrl,
+                                contentDescription = forecast.summary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = forecast.date, modifier = Modifier.weight(1f))
+                            Text(text = "${forecast.summary}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text(text = "${forecast.temperature}°C")
+                                forecast.feelsLike?.let {
+                                    Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(text = stringResource(R.string.hourly_forecast), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-            }
-            items(weatherData.hourlyForecasts) { forecast ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(
-                            model = forecast.iconUrl,
-                            contentDescription = forecast.condition,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = forecast.time, modifier = Modifier.weight(1f))
-                        Text(text = "${forecast.condition}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Text(text = "${forecast.temperature}°C")
-                            forecast.feelsLike?.let {
-                                Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(text = stringResource(R.string.hourly_forecast), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+                }
+                items(weatherData.hourlyForecasts) { forecast ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(
+                                model = forecast.iconUrl,
+                                contentDescription = forecast.condition,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = forecast.time, modifier = Modifier.weight(1f))
+                            Text(text = "${forecast.condition}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text(text = "${forecast.temperature}°C")
+                                forecast.feelsLike?.let {
+                                    Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
@@ -485,6 +517,8 @@ fun GreetingPreview() {
                 )
             ),
             navController = navController,
+            isRefreshing = false,
+            onRefresh = {}
         )
     }
 }
@@ -580,7 +614,7 @@ fun SettingsScreen(
         }, verticalAlignment = Alignment.CenterVertically) {
             RadioButton(
                 selected = locationMode == "detect",
-                onClick = { 
+                onClick = {
                     locationMode = "detect"
                     userPreferences.locationMode = "detect"
                     onLocationSelected("detect")
@@ -594,7 +628,7 @@ fun SettingsScreen(
         }, verticalAlignment = Alignment.CenterVertically) {
             RadioButton(
                 selected = locationMode == "manual",
-                onClick = { 
+                onClick = {
                     locationMode = "manual"
                     userPreferences.locationMode = "manual"
                 }
