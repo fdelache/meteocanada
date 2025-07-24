@@ -718,7 +718,7 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             while (true) {
-                delay(100)
+                delay(500)
                 if (layers.isNotEmpty()) {
                     currentLayerIndex = (currentLayerIndex + 1) % layers.size
                 }

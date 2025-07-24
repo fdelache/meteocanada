@@ -183,7 +183,19 @@ object MapUtils {
                     eventType = parser.next()
                 }
                 inputStream.close()
-                layers.sortedBy { it.identifier }
+                val sortedLayers = layers.sortedBy { it.identifier }
+
+                if (sortedLayers.size > 16) {
+                    val indices = mutableSetOf<Int>()
+                    val step = sortedLayers.size.toFloat() / 15
+                    for (i in 0..14) {
+                        indices.add((i * step).toInt())
+                    }
+                    indices.add(sortedLayers.size - 1) // Ensure the last layer is always included
+                    indices.map { sortedLayers[it] }
+                } else {
+                    sortedLayers
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 emptyList()
