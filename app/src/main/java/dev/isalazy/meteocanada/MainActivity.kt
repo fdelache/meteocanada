@@ -55,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -92,7 +93,10 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 data class CitySearchResult(val displayName: String, val lat: Double, val lon: Double)
 
@@ -739,7 +743,25 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
                 CircularProgressIndicator()
             }
         } else if (layers.isNotEmpty()) {
-            RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.weight(1f), scale = 2f)
+            Box(modifier = Modifier.weight(1f)) {
+                RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.fillMaxSize())
+                Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp),
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = androidx.compose.material3.MaterialTheme.shapes.small
+                    ) {
+                        Text(
+                            text = formatTimestamp(layers[currentLayerIndex].identifier),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = Color.White,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { isPlaying = !isPlaying }, enabled = !isPreFetching) {
                     if (isPlaying) {
@@ -791,11 +813,34 @@ suspend fun preFetchRadarTiles(
         }
     }
 
-    coroutineScope { 
-        requests.map { 
-            async { 
-                imageLoader.execute(it) 
+    coroutineScope {
+        requests.map {
+            async {
+                imageLoader.execute(it)
             }
         }.awaitAll()
+    }
+}
+
+fun formatTimestamp(identifier: String): String {
+    try {
+        val prefix = "RADAR_1KM_RRAI_14_"
+        if (!identifier.startsWith(prefix)) return ""
+
+        val temp = identifier.removePrefix(prefix)
+        val timestampString = temp.substringBeforeLast("_")
+
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss'Z'", Locale.getDefault())
+        inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val date: Date? = inputFormat.parse(timestampString)
+
+        if (date != null) {
+            val outputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+            return outputFormat.format(date)
+        }
+        return ""
+    } catch (e: Exception) {
+        Log.e("TimestampFormat", "Failed to format timestamp: $identifier", e)
+        return ""
     }
 }
