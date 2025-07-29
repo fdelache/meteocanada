@@ -110,6 +110,7 @@ data class WeatherData(
     val wind: String,
     val currentIconUrl: String,
     val currentFeelsLike: String?,
+    val observationTime: String,
     val dailyForecasts: List<DailyForecast>,
     val hourlyForecasts: List<HourlyForecast>
 )
@@ -310,6 +311,13 @@ class MainActivity : ComponentActivity() {
         val currentFeelsLike = observation.optJSONObject("feelsLike")?.getString("metric")
         val wind = "${observation.getString("windDirection")} ${observation.getJSONObject("windSpeed").getString("metric")} km/h"
         val currentIconUrl = "https://meteo.gc.ca/weathericons/${observation.getString("iconCode")}.gif"
+        val timestampString = observation.getString("timeStamp")
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val date = inputFormat.parse(timestampString)
+        val outputFormat = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT, Locale.getDefault())
+        outputFormat.timeZone = TimeZone.getDefault()
+        val observationTime = date?.let { outputFormat.format(it) } ?: ""
 
         val dailyForecasts = mutableListOf<DailyForecast>()
         val dailyForecastArray = jsonObject.getJSONObject("dailyFcst").getJSONArray("daily")
@@ -349,7 +357,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature && !currentFeelsLike.isNullOrBlank()) currentFeelsLike else null, dailyForecasts, hourlyForecasts)
+        return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature && !currentFeelsLike.isNullOrBlank()) currentFeelsLike else null, observationTime, dailyForecasts, hourlyForecasts)
     }
 
     private fun searchCities(query: String, callback: (List<CitySearchResult>) -> Unit) {
@@ -436,6 +444,7 @@ fun WeatherScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
                             Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
+                            Text(text = stringResource(R.string.observation_time, weatherData.observationTime))
                             Text(text = stringResource(R.string.wind, weatherData.wind))
                         }
                         IconButton(onClick = { navController.navigate("radar") }) {
@@ -518,6 +527,7 @@ fun GreetingPreview() {
                 currentTemperature = "20",
                 currentFeelsLike = "25",
                 wind = "SW 10 km/h",
+                observationTime = "10:00",
                 currentIconUrl = "https://meteo.gc.ca/weathericons/00.gif",
                 dailyForecasts = listOf(
                     DailyForecast("Mon", "Sunny", "25", "00", "https://meteo.gc.ca/weathericons/00.gif", null, "0"),

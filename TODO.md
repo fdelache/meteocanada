@@ -9,3 +9,4 @@ The following is a list os feature I would like to implement, along with an exam
 6. [x] Refresh the weather data when we drag down the app`s screen. Should work for both the forecast page, and the radar map page
 7. Allow possibility to move and zoom the Radar map
 8. [x] Display the current radar map timestamp
+9. [x] Display the time of current weather observations

@@ -18,4 +18,5 @@
     <string name="select_a_city_manually">Sélectionner une ville manuellement</string>
     <string name="play">Jouer</string>
     <string name="pause">Pause</string>
+    <string name="observation_time">Observé à %1$s</string>
 </resources>
