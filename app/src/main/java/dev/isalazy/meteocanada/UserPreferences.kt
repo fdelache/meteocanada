@@ -15,6 +15,7 @@ class UserPreferences(context: Context) {
         const val KEY_DARK_MODE = "dark_mode"
         const val KEY_LOCATION_MODE = "location_mode"
         const val KEY_LOCATION_NAME = "location_name"
+        const val KEY_RADAR_HISTORY = "radar_history"
 
         // Montreal's coordinates
         const val MONTREAL_LAT = 45.5017f
@@ -72,5 +73,11 @@ class UserPreferences(context: Context) {
                     putString(KEY_LOCATION_NAME, value)
                 }
             }
+        }
+
+    var radarHistory: Int
+        get() = preferences.getInt(KEY_RADAR_HISTORY, 1)
+        set(value) {
+            preferences.edit { putInt(KEY_RADAR_HISTORY, value) }
         }
 }

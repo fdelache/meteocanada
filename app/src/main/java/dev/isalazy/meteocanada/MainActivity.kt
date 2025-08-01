@@ -562,6 +562,7 @@ fun SettingsScreen(
     var locationMode by remember { mutableStateOf(userPreferences.locationMode) }
     var locationName by remember { mutableStateOf(userPreferences.locationName) }
     var isSearching by remember { mutableStateOf(false) }
+    var radarHistory by remember { mutableIntStateOf(userPreferences.radarHistory) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -698,14 +699,44 @@ fun SettingsScreen(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = stringResource(R.string.radar_history), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth().clickable {
+            radarHistory = 1
+            userPreferences.radarHistory = 1
+        }, verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(
+                selected = radarHistory == 1,
+                onClick = {
+                    radarHistory = 1
+                    userPreferences.radarHistory = 1
+                }
+            )
+            Text(stringResource(R.string.one_hour))
+        }
+        Row(modifier = Modifier.fillMaxWidth().clickable {
+            radarHistory = 3
+            userPreferences.radarHistory = 3
+        }, verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(
+                selected = radarHistory == 3,
+                onClick = {
+                    radarHistory = 3
+                    userPreferences.radarHistory = 3
+                }
+            )
+            Text(stringResource(R.string.three_hours))
+        }
     }
 }
 
 @Composable
 fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
     val context = LocalContext.current
-    val layers by produceState(initialValue = emptyList()) {
-        value = MapUtils.getRadarLayers()
+    val userPreferences = remember { UserPreferences(context) }
+    val layers by produceState(initialValue = emptyList(), userPreferences.radarHistory) {
+        value = MapUtils.getRadarLayers(userPreferences.radarHistory)
     }
 
     val screenWidthPx = LocalWindowInfo.current.containerSize.width

@@ -19,4 +19,7 @@
     <string name="play">Jouer</string>
     <string name="pause">Pause</string>
     <string name="observation_time">Observé à %1$s</string>
+    <string name="radar_history">Historique du radar</string>
+    <string name="one_hour">1 heure</string>
+    <string name="three_hours">3 heures</string>
 </resources>

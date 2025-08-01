@@ -10,6 +10,11 @@ import org.locationtech.proj4j.CoordinateTransformFactory
 import org.locationtech.proj4j.ProjCoordinate
 import org.xmlpull.v1.XmlPullParser
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
@@ -104,7 +109,7 @@ object MapUtils {
         val resourceUrlTemplate: String
     )
 
-    suspend fun getRadarLayers(): List<RadarLayer> {
+    suspend fun getRadarLayers(radarHistory: Int): List<RadarLayer> {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://meteo.gc.ca/api/map/radar.3978/wmts/1.0.0/WMTSCapabilities.xml")
@@ -185,16 +190,30 @@ object MapUtils {
                 inputStream.close()
                 val sortedLayers = layers.sortedBy { it.identifier }
 
-                if (sortedLayers.size > 16) {
+                val now = getTimestampFromIdentifier(sortedLayers.last().identifier) ?: Date()
+
+                val recentLayers = sortedLayers.filter {
+                    val timestamp = getTimestampFromIdentifier(it.identifier)
+                    if (timestamp != null) {
+                        val diff = now.time - timestamp.time
+                        val maxDiff = TimeUnit.HOURS.toMillis(radarHistory.toLong())
+                        diff <= maxDiff
+                    } else {
+                        false
+                    }
+                }
+
+                val maxLayers = 10
+                if (recentLayers.size > maxLayers) {
                     val indices = mutableSetOf<Int>()
-                    val step = sortedLayers.size.toFloat() / 15
-                    for (i in 0..14) {
+                    val step = recentLayers.size.toFloat() / (maxLayers - 1)
+                    for (i in 0 until maxLayers - 1) {""
                         indices.add((i * step).toInt())
                     }
-                    indices.add(sortedLayers.size - 1) // Ensure the last layer is always included
-                    indices.map { sortedLayers[it] }
+                    indices.add(recentLayers.size - 1) // Ensure the last layer is always included
+                    indices.map { recentLayers[it] }
                 } else {
-                    sortedLayers
+                    recentLayers
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -320,5 +339,21 @@ object MapUtils {
             }
         }
         return bestZoom
+    }
+
+    private fun getTimestampFromIdentifier(identifier: String): Date? {
+        return try {
+            val prefix = "RADAR_1KM_RRAI_14_"
+            if (!identifier.startsWith(prefix)) return null
+
+            val temp = identifier.removePrefix(prefix)
+            val timestampString = temp.substringBeforeLast("_")
+
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss'Z'", Locale.getDefault())
+            inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+            inputFormat.parse(timestampString)
+        } catch (_: Exception) {
+            null
+        }
     }
 }
