@@ -30,21 +30,28 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,6 +71,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.os.ConfigurationCompat
 import androidx.core.os.LocaleListCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -168,7 +176,7 @@ class MainActivity : ComponentActivity() {
             MeteoCanadaTheme(darkTheme = userPreferences.isDarkMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
                     NavHost(navController = navController, startDestination = "weather") {
@@ -177,37 +185,25 @@ class MainActivity : ComponentActivity() {
                                 weatherData = weatherDataState.value,
                                 navController = navController,
                                 isRefreshing = isRefreshing,
-                                onRefresh = { refreshWeather() }
+                                onRefresh = { refreshWeather() },
+                                onCitySelected = {
+                                    userPreferences.selectedCity = it
+                                    if (it == null) {
+                                        requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                    } else {
+                                        fetchWeather(it.lat, it.lon)
+                                    }
+                                },
+                                onAddCity = {
+                                    userPreferences.addCity(it)
+                                    userPreferences.selectedCity = it
+                                    fetchWeather(it.lat, it.lon)
+                                }
                             )
                         }
                         composable("settings") {
-                            val searchResults = remember { mutableStateOf(emptyList<CitySearchResult>()) }
-                            val coroutineScope = rememberCoroutineScope()
-                            var searchJob by remember { mutableStateOf<Job?>(null) }
-
                             SettingsScreen(
                                 navController = navController,
-                                onLocationSelected = { location ->
-                                    when (location) {
-                                        "detect" -> {
-                                            requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                                        }
-                                    }
-                                },
-                                onCitySelected = {
-                                    userPreferences.setLocation(it.lat.toFloat(), it.lon.toFloat(), it.displayName)
-                                    fetchWeather(it.lat, it.lon)
-                                },
-                                onSearchQueryChanged = {
-                                    searchJob?.cancel()
-                                    searchJob = coroutineScope.launch {
-                                        delay(300) // Debounce
-                                        searchCities(it) { results ->
-                                            searchResults.value = results
-                                        }
-                                    }
-                                },
-                                searchResults = searchResults.value,
                                 onLanguageChange = { recreate() }
                             )
                         }
@@ -277,7 +273,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun fetchWeather(latitude: Double, longitude: Double, isRetry: Boolean = false) {
+    fun fetchWeather(latitude: Double, longitude: Double, isRetry: Boolean = false) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val lang = userPreferences.appLanguage
@@ -360,7 +356,7 @@ class MainActivity : ComponentActivity() {
         return WeatherData(location, latitude, longitude, currentCondition, currentTemperature, wind, currentIconUrl, if (currentFeelsLike != currentTemperature && !currentFeelsLike.isNullOrBlank()) currentFeelsLike else null, observationTime, dailyForecasts, hourlyForecasts)
     }
 
-    private fun searchCities(query: String, callback: (List<CitySearchResult>) -> Unit) {
+    fun searchCities(query: String, callback: (List<CitySearchResult>) -> Unit) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val lang = userPreferences.appLanguage
@@ -403,104 +399,142 @@ fun WeatherScreen(
     navController: NavController,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    onCitySelected: (UserPreferences.SavedCity?) -> Unit,
+    onAddCity: (UserPreferences.SavedCity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = modifier
-    ) {
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        weatherData?.let {
-                            Text(
-                                text = stringResource(R.string.location, it.location),
-                                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        } ?: run {
-                            Text(text = stringResource(id = R.string.loading_weather_data), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-                        }
-                    }
-                    IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var showAddCityDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val userPreferences = remember { UserPreferences(context) }
+    var cities by remember { mutableStateOf(userPreferences.getCities()) }
 
-            if (weatherData != null) {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                CityManagementDrawer(
+                    cities = cities,
+                    selectedCity = userPreferences.selectedCity,
+                    onCitySelected = {
+                        onCitySelected(it)
+                        scope.launch { drawerState.close() }
+                    },
+                    onAddCityClicked = {
+                        showAddCityDialog = true
+                    },
+                )
+            }
+        }
+    ) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = modifier
+        ) {
+            LazyColumn(modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .windowInsetsPadding(WindowInsets.statusBars)) {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        AsyncImage(
-                            model = weatherData.currentIconUrl,
-                            contentDescription = weatherData.currentCondition,
-                            modifier = Modifier.size(72.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = stringResource(R.string.current_conditions), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-                            Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
-                            Text(text = stringResource(R.string.observation_time, weatherData.observationTime))
-                            Text(text = stringResource(R.string.wind, weatherData.wind))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu")
+                            }
+                            weatherData?.let {
+                                Text(
+                                    text = stringResource(R.string.location, it.location),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } ?: run {
+                                Text(text = stringResource(id = R.string.loading_weather_data), style = MaterialTheme.typography.headlineMedium)
+                            }
                         }
-                        IconButton(onClick = { navController.navigate("radar") }) {
-                            Icon(
-                                painterResource(
-                                    id = R.drawable.map_24px
-                                ), contentDescription = stringResource(R.string.radar)
-                            )
+                        IconButton(onClick = { navController.navigate("settings") }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                item {
-                    Text(text = stringResource(R.string.daily_forecast), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-                }
-                items(weatherData.dailyForecasts) { forecast ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (weatherData != null) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             AsyncImage(
-                                model = forecast.iconUrl,
-                                contentDescription = forecast.summary,
-                                modifier = Modifier.size(48.dp)
+                                model = weatherData.currentIconUrl,
+                                contentDescription = weatherData.currentCondition,
+                                modifier = Modifier.size(72.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = forecast.date, modifier = Modifier.weight(1f))
-                            Text(text = "${forecast.summary}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                Text(text = "${forecast.temperature}°C")
-                                forecast.feelsLike?.let {
-                                    Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = stringResource(R.string.current_conditions), style = MaterialTheme.typography.headlineSmall)
+                                Text(text = "${weatherData.currentCondition}, ${weatherData.currentTemperature}°C${weatherData.currentFeelsLike?.let { " ($it°C)" } ?: ""}")
+                                Text(text = stringResource(R.string.observation_time, weatherData.observationTime))
+                                Text(text = stringResource(R.string.wind, weatherData.wind))
+                            }
+                            IconButton(onClick = { navController.navigate("radar") }) {
+                                Icon(
+                                    painterResource(
+                                        id = R.drawable.map_24px
+                                    ), contentDescription = stringResource(R.string.radar)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    item {
+                        Text(text = stringResource(R.string.daily_forecast), style = MaterialTheme.typography.headlineSmall)
+                    }
+                    items(weatherData.dailyForecasts) { forecast ->
+                        Card(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)) {
+                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                AsyncImage(
+                                    model = forecast.iconUrl,
+                                    contentDescription = forecast.summary,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = forecast.date, modifier = Modifier.weight(1f))
+                                Text(text = "${forecast.summary}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
+                                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                    Text(text = "${forecast.temperature}°C")
+                                    forecast.feelsLike?.let {
+                                        Text(text = "($it°C)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = stringResource(R.string.hourly_forecast), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-                }
-                items(weatherData.hourlyForecasts) { forecast ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            AsyncImage(
-                                model = forecast.iconUrl,
-                                contentDescription = forecast.condition,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = forecast.time, modifier = Modifier.weight(1f))
-                            Text(text = "${forecast.condition}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                Text(text = "${forecast.temperature}°C")
-                                forecast.feelsLike?.let {
-                                    Text(text = "($it°C)", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = stringResource(R.string.hourly_forecast), style = MaterialTheme.typography.headlineSmall)
+                    }
+                    items(weatherData.hourlyForecasts) { forecast ->
+                        Card(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)) {
+                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                AsyncImage(
+                                    model = forecast.iconUrl,
+                                    contentDescription = forecast.condition,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = forecast.time, modifier = Modifier.weight(1f))
+                                Text(text = "${forecast.condition}${if (forecast.precip.isNotEmpty() && forecast.precip != "0") " (${forecast.precip}%)" else ""}", modifier = Modifier.weight(2f))
+                                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                    Text(text = "${forecast.temperature}°C")
+                                    forecast.feelsLike?.let {
+                                        Text(text = "($it°C)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
                         }
@@ -509,8 +543,130 @@ fun WeatherScreen(
             }
         }
     }
+
+    if (showAddCityDialog) {
+        AddCityDialog(
+            onDismiss = { showAddCityDialog = false },
+            onCitySelected = {
+                onAddCity(it)
+                cities = userPreferences.getCities()
+                showAddCityDialog = false
+            }
+        )
+    }
 }
 
+@Composable
+fun CityManagementDrawer(
+    cities: List<UserPreferences.SavedCity>,
+    selectedCity: UserPreferences.SavedCity?,
+    onCitySelected: (UserPreferences.SavedCity?) -> Unit,
+    onAddCityClicked: () -> Unit
+) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        Text(text = stringResource(R.string.cities), style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onCitySelected(null) }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = stringResource(R.string.detect_my_location), modifier = Modifier.weight(1f))
+            if (selectedCity == null) {
+                Icon(Icons.Default.Check, contentDescription = "Selected")
+            }
+        }
+        cities.forEach { city ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCitySelected(city) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = city.displayName, modifier = Modifier.weight(1f))
+                if (selectedCity?.displayName == city.displayName) {
+                    Icon(Icons.Default.Check, contentDescription = "Selected")
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onAddCityClicked() }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_city))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = stringResource(R.string.add_city))
+        }
+    }
+}
+
+@Composable
+fun AddCityDialog(
+    onDismiss: () -> Unit,
+    onCitySelected: (UserPreferences.SavedCity) -> Unit
+) {
+    val context = LocalContext.current
+    val mainActivity = context as? MainActivity
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf(emptyList<CitySearchResult>()) }
+    val coroutineScope = rememberCoroutineScope()
+    var searchJob by remember { mutableStateOf<Job?>(null) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = stringResource(R.string.add_city), style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        searchJob?.cancel()
+                        searchJob = coroutineScope.launch {
+                            delay(300) // Debounce
+                            mainActivity?.searchCities(it) { results ->
+                                searchResults = results
+                            }
+                        }
+                    },
+                    label = { Text(stringResource(R.string.add_city)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(searchResults) {
+                        Row(modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onCitySelected(
+                                    UserPreferences.SavedCity(
+                                        displayName = it.displayName,
+                                        lat = it.lat,
+                                        lon = it.lon
+                                    )
+                                )
+                            }
+                            .padding(vertical = 12.dp)) {
+                            Text(it.displayName)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 @Preview(showBackground = true)
@@ -540,7 +696,9 @@ fun GreetingPreview() {
             ),
             navController = navController,
             isRefreshing = false,
-            onRefresh = {}
+            onRefresh = {},
+            onCitySelected = {},
+            onAddCity = {}
         )
     }
 }
@@ -548,39 +706,36 @@ fun GreetingPreview() {
 @Composable
 fun SettingsScreen(
     navController: NavController,
-    onLocationSelected: (String) -> Unit,
-    onCitySelected: (CitySearchResult) -> Unit,
-    onSearchQueryChanged: (String) -> Unit,
-    searchResults: List<CitySearchResult>,
     onLanguageChange: () -> Unit
 ) {
     val context = LocalContext.current
     val userPreferences = remember { UserPreferences(context) }
     var selectedLanguage by remember { mutableStateOf(userPreferences.appLanguage) }
     var isDarkMode by remember { mutableStateOf(userPreferences.isDarkMode) }
-    var searchQuery by remember { mutableStateOf("") }
-    var locationMode by remember { mutableStateOf(userPreferences.locationMode) }
-    var locationName by remember { mutableStateOf(userPreferences.locationName) }
-    var isSearching by remember { mutableStateOf(false) }
     var radarHistory by remember { mutableIntStateOf(userPreferences.radarHistory) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).windowInsetsPadding(WindowInsets.statusBars)) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)
+        .windowInsetsPadding(WindowInsets.statusBars)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { navController.popBackStack() }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = stringResource(R.string.settings), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+            Text(text = stringResource(R.string.settings), style = MaterialTheme.typography.headlineSmall)
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Text(text = stringResource(R.string.select_language), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Text(text = stringResource(R.string.select_language), style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         Row(
-            modifier = Modifier.fillMaxWidth().clickable {
-                selectedLanguage = "en"
-                userPreferences.appLanguage = "en"
-                onLanguageChange()
-            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    selectedLanguage = "en"
+                    userPreferences.appLanguage = "en"
+                    onLanguageChange()
+                },
             verticalAlignment = Alignment.CenterVertically
         ) {
             RadioButton(
@@ -594,11 +749,13 @@ fun SettingsScreen(
             Text("English")
         }
         Row(
-            modifier = Modifier.fillMaxWidth().clickable {
-                selectedLanguage = "fr"
-                userPreferences.appLanguage = "fr"
-                onLanguageChange()
-            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    selectedLanguage = "fr"
+                    userPreferences.appLanguage = "fr"
+                    onLanguageChange()
+                },
             verticalAlignment = Alignment.CenterVertically
         ) {
             RadioButton(
@@ -617,7 +774,7 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = stringResource(R.string.dark_mode), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+            Text(text = stringResource(R.string.dark_mode), style = MaterialTheme.typography.headlineSmall)
             Switch(
                 checked = isDarkMode,
                 onCheckedChange = {
@@ -628,84 +785,14 @@ fun SettingsScreen(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Text(text = stringResource(R.string.select_location), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Text(text = stringResource(R.string.radar_history), style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth().clickable {
-            locationMode = "detect"
-            userPreferences.locationMode = "detect"
-            onLocationSelected("detect")
-        }, verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = locationMode == "detect",
-                onClick = {
-                    locationMode = "detect"
-                    userPreferences.locationMode = "detect"
-                    onLocationSelected("detect")
-                }
-            )
-            Text(stringResource(R.string.detect_my_location))
-        }
-        Row(modifier = Modifier.fillMaxWidth().clickable {
-            locationMode = "manual"
-            userPreferences.locationMode = "manual"
-        }, verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = locationMode == "manual",
-                onClick = {
-                    locationMode = "manual"
-                    userPreferences.locationMode = "manual"
-                }
-            )
-            Text(stringResource(R.string.select_a_city_manually))
-        }
-        if (locationMode == "manual") {
-            if (locationName != null && !isSearching) {
-                Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        text = locationName ?: "",
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    TextButton(onClick = { isSearching = true }) {
-                        Text("Change")
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = {
-                        searchQuery = it
-                        onSearchQueryChanged(it)
-                    },
-                    label = { Text("Search for a city") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(searchResults) {
-                        Row(modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onCitySelected(it)
-                                locationName = it.displayName
-                                isSearching = false
-                            }
-                            .padding(vertical = 12.dp)) {
-                            Text(it.displayName)
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text = stringResource(R.string.radar_history), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth().clickable {
-            radarHistory = 1
-            userPreferences.radarHistory = 1
-        }, verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                radarHistory = 1
+                userPreferences.radarHistory = 1
+            }, verticalAlignment = Alignment.CenterVertically) {
             RadioButton(
                 selected = radarHistory == 1,
                 onClick = {
@@ -715,10 +802,12 @@ fun SettingsScreen(
             )
             Text(stringResource(R.string.one_hour))
         }
-        Row(modifier = Modifier.fillMaxWidth().clickable {
-            radarHistory = 3
-            userPreferences.radarHistory = 3
-        }, verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                radarHistory = 3
+                userPreferences.radarHistory = 3
+            }, verticalAlignment = Alignment.CenterVertically) {
             RadioButton(
                 selected = radarHistory == 3,
                 onClick = {
@@ -783,7 +872,7 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = stringResource(R.string.radar), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+            Text(text = stringResource(R.string.radar), style = MaterialTheme.typography.headlineSmall)
         }
         if (isPreFetching) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -792,19 +881,21 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
         } else if (layers.isNotEmpty()) {
             Box(modifier = Modifier.weight(1f)) {
                 RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.fillMaxSize())
-                Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)) {
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .padding(8.dp),
                         color = Color.Black.copy(alpha = 0.5f),
-                        shape = androidx.compose.material3.MaterialTheme.shapes.small
+                        shape = MaterialTheme.shapes.small
                     ) {
                         Text(
                             text = formatTimestamp(layers[currentLayerIndex].identifier),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             color = Color.White,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }

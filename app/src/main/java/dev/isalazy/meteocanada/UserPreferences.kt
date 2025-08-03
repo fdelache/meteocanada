@@ -3,6 +3,7 @@ package dev.isalazy.meteocanada
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import org.json.JSONObject
 
 class UserPreferences(context: Context) {
     private val preferences: SharedPreferences =
@@ -13,8 +14,8 @@ class UserPreferences(context: Context) {
         const val KEY_LONGITUDE = "longitude"
         const val KEY_APP_LANGUAGE = "app_language"
         const val KEY_DARK_MODE = "dark_mode"
-        const val KEY_LOCATION_MODE = "location_mode"
-        const val KEY_LOCATION_NAME = "location_name"
+        const val KEY_CITIES = "cities"
+        const val KEY_SELECTED_CITY_JSON = "selected_city_json"
         const val KEY_RADAR_HISTORY = "radar_history"
 
         // Montreal's coordinates
@@ -22,22 +23,86 @@ class UserPreferences(context: Context) {
         const val MONTREAL_LON = -73.5673f
     }
 
-    fun getLocation(): Pair<Float, Float> {
-        val lat = preferences.getFloat(KEY_LATITUDE, MONTREAL_LAT)
-        val lon = preferences.getFloat(KEY_LONGITUDE, MONTREAL_LON)
-        return Pair(lat, lon)
+    data class SavedCity(val displayName: String, val lat: Double, val lon: Double) {
+        fun toJson(): String {
+            return JSONObject().apply {
+                put("displayName", displayName)
+                put("lat", lat)
+                put("lon", lon)
+            }.toString()
+        }
+
+        companion object {
+            fun fromJson(json: String): SavedCity {
+                val jsonObject = JSONObject(json)
+                return SavedCity(
+                    displayName = jsonObject.getString("displayName"),
+                    lat = jsonObject.getDouble("lat"),
+                    lon = jsonObject.getDouble("lon")
+                )
+            }
+        }
     }
 
-    fun setLocation(latitude: Float, longitude: Float, name: String? = null) {
+    fun getCities(): List<SavedCity> {
+        val citySet = preferences.getStringSet(KEY_CITIES, emptySet()) ?: emptySet()
+        return citySet.map { SavedCity.fromJson(it) }
+    }
+
+    fun addCity(city: SavedCity) {
+        val cities = getCities().toMutableList()
+        if (!cities.any { it.displayName == city.displayName }) {
+            cities.add(city)
+            preferences.edit {
+                putStringSet(KEY_CITIES, cities.map { it.toJson() }.toSet())
+            }
+        }
+    }
+
+    fun removeCity(city: SavedCity) {
+        val cities = getCities().toMutableList()
+        if (cities.remove(city)) {
+            preferences.edit {
+                putStringSet(KEY_CITIES, cities.map { it.toJson() }.toSet())
+            }
+        }
+    }
+
+    var selectedCity: SavedCity?
+        get() {
+            val json = preferences.getString(KEY_SELECTED_CITY_JSON, null)
+            return json?.let { SavedCity.fromJson(it) }
+        }
+        set(value) {
+            preferences.edit {
+                if (value == null) {
+                    remove(KEY_SELECTED_CITY_JSON)
+                } else {
+                    putString(KEY_SELECTED_CITY_JSON, value.toJson())
+                }
+            }
+        }
+
+    fun getLocation(): Pair<Float, Float> {
+        val city = selectedCity
+        return if (city != null) {
+            Pair(city.lat.toFloat(), city.lon.toFloat())
+        } else {
+            val lat = preferences.getFloat(KEY_LATITUDE, MONTREAL_LAT)
+            val lon = preferences.getFloat(KEY_LONGITUDE, MONTREAL_LON)
+            Pair(lat, lon)
+        }
+    }
+
+    fun setLocation(latitude: Float, longitude: Float) {
         preferences.edit {
             putFloat(KEY_LATITUDE, latitude)
             putFloat(KEY_LONGITUDE, longitude)
-            name?.let { putString(KEY_LOCATION_NAME, it) }
         }
     }
 
     fun isLocationSet(): Boolean {
-        return preferences.contains(KEY_LATITUDE) && preferences.contains(KEY_LONGITUDE)
+        return selectedCity != null || (preferences.contains(KEY_LATITUDE) && preferences.contains(KEY_LONGITUDE))
     }
 
     var appLanguage: String
@@ -53,27 +118,16 @@ class UserPreferences(context: Context) {
         }
 
     var locationMode: String
-        get() = preferences.getString(KEY_LOCATION_MODE, "detect") ?: "detect"
+        get() = if (selectedCity == null) "detect" else "manual"
         set(value) {
-            preferences.edit {
-                putString(KEY_LOCATION_MODE, value)
-                if (value == "detect") {
-                    remove(KEY_LOCATION_NAME)
-                }
+            if (value == "detect") {
+                selectedCity = null
             }
         }
 
-    var locationName: String?
-        get() = preferences.getString(KEY_LOCATION_NAME, null)
-        set(value) {
-            preferences.edit {
-                if (value == null) {
-                    remove(KEY_LOCATION_NAME)
-                } else {
-                    putString(KEY_LOCATION_NAME, value)
-                }
-            }
-        }
+    val locationName: String?
+        get() = selectedCity?.displayName
+
 
     var radarHistory: Int
         get() = preferences.getInt(KEY_RADAR_HISTORY, 1)
