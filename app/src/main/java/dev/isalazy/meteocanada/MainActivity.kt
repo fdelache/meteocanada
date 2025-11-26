@@ -49,6 +49,11 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.foundation.background
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
@@ -61,6 +66,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -198,7 +204,8 @@ class MainActivity : ComponentActivity() {
                                     userPreferences.addCity(it)
                                     userPreferences.selectedCity = it
                                     fetchWeather(it.lat, it.lon)
-                                }
+                                },
+                                onRequestPermission = { requestPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
                             )
                         }
                         composable("settings") {
@@ -401,6 +408,7 @@ fun WeatherScreen(
     onRefresh: () -> Unit,
     onCitySelected: (UserPreferences.SavedCity?) -> Unit,
     onAddCity: (UserPreferences.SavedCity) -> Unit,
+    onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -417,13 +425,24 @@ fun WeatherScreen(
                 CityManagementDrawer(
                     cities = cities,
                     selectedCity = userPreferences.selectedCity,
-                    onCitySelected = {
-                        onCitySelected(it)
+                    onCitySelected = { city ->
+                        onCitySelected(city)
+                        if (city == null) {
+                            onRequestPermission()
+                        }
                         scope.launch { drawerState.close() }
                     },
                     onAddCityClicked = {
                         showAddCityDialog = true
                     },
+                    onCityRemoved = { cityToRemove ->
+                        userPreferences.removeCity(cityToRemove)
+                        cities = userPreferences.getCities() // Refresh the list
+                        if (userPreferences.selectedCity == cityToRemove) {
+                            userPreferences.selectedCity = null // Deselect if removed
+                            onRequestPermission() // Revert to detect location
+                        }
+                    }
                 )
             }
         }
@@ -556,12 +575,14 @@ fun WeatherScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CityManagementDrawer(
     cities: List<UserPreferences.SavedCity>,
     selectedCity: UserPreferences.SavedCity?,
     onCitySelected: (UserPreferences.SavedCity?) -> Unit,
-    onAddCityClicked: () -> Unit
+    onAddCityClicked: () -> Unit,
+    onCityRemoved: (UserPreferences.SavedCity) -> Unit
 ) {
     Column(modifier = Modifier
         .fillMaxSize()
@@ -581,18 +602,58 @@ fun CityManagementDrawer(
             }
         }
         cities.forEach { city ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onCitySelected(city) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = city.displayName, modifier = Modifier.weight(1f))
-                if (selectedCity?.displayName == city.displayName) {
-                    Icon(Icons.Default.Check, contentDescription = "Selected")
+            key(city) { // Added key here
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = { dismissValue ->
+                        if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
+                            onCityRemoved(city)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                )
+
+                SwipeToDismissBox(
+                    state = dismissState,
+                    backgroundContent = {
+                        val color = when (dismissState.targetValue) {
+                            SwipeToDismissBoxValue.Settled -> Color.Transparent
+                            SwipeToDismissBoxValue.EndToStart -> Color.Red
+                            SwipeToDismissBoxValue.StartToEnd -> Color.Red
+                        }
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(color)
+                                .padding(horizontal = 20.dp),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = stringResource(R.string.delete_city),
+                                tint = Color.White
+                            )
+                        }
+                    },
+                    enableDismissFromEndToStart = true,
+                    enableDismissFromStartToEnd = true
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable { onCitySelected(city) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = city.displayName, modifier = Modifier.weight(1f))
+                        if (selectedCity?.displayName == city.displayName) {
+                            Icon(Icons.Default.Check, contentDescription = "Selected")
+                        }
+                    }
                 }
-            }
+            } // Closed key here
         }
         Spacer(modifier = Modifier.height(16.dp))
         Row(
@@ -698,7 +759,8 @@ fun GreetingPreview() {
             isRefreshing = false,
             onRefresh = {},
             onCitySelected = {},
-            onAddCity = {}
+            onAddCity = {},
+            onRequestPermission = {} // Added this line
         )
     }
 }

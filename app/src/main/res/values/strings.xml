@@ -24,4 +24,5 @@
     <string name="three_hours">3 hours</string>
     <string name="cities">Cities</string>
     <string name="add_city">Add city</string>
+    <string name="delete_city">Delete City</string>
 </resources>
