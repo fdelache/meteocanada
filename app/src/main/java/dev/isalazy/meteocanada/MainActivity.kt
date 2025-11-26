@@ -899,16 +899,28 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
 
     var currentLayerIndex by remember { mutableIntStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
-    var isPreFetching by remember { mutableStateOf(true) }
+    var isPreFetching by remember { mutableStateOf(true) } // For initial layer
+    var isHistoryReady by remember { mutableStateOf(false) } // For all historical layers
 
-    rememberCoroutineScope()
+    val scope = rememberCoroutineScope() // ensure scope is available
 
     LaunchedEffect(layers, optimalZoom, screenWidthPx, screenHeightPx) {
         if (layers.isNotEmpty()) {
             isPreFetching = true
-            preFetchRadarTiles(context, layers, lat, lon, optimalZoom, screenWidthPx, screenHeightPx)
-            isPreFetching = false
-            currentLayerIndex = layers.size - 1
+            isHistoryReady = false // Reset history readiness
+
+            // Fetch and display only the most recent layer immediately
+            val mostRecentLayer = layers.last()
+            preFetchRadarTiles(context, listOf(mostRecentLayer), lat, lon, optimalZoom, screenWidthPx, screenHeightPx)
+            currentLayerIndex = layers.size - 1 // Start at the most recent layer
+            isPreFetching = false // Hide initial loading spinner, show map
+
+            // Launch a background job to pre-fetch the remaining historical layers
+            scope.launch {
+                val remainingLayers = layers.dropLast(1)
+                preFetchRadarTiles(context, remainingLayers, lat, lon, optimalZoom, screenWidthPx, screenHeightPx)
+                isHistoryReady = true // All historical layers are now ready
+            }
         }
     }
 
@@ -963,8 +975,10 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { isPlaying = !isPlaying }, enabled = !isPreFetching) {
-                    if (isPlaying) {
+                IconButton(onClick = { isPlaying = !isPlaying }, enabled = isHistoryReady) {
+                    if (!isHistoryReady) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    } else if (isPlaying) {
                         Icon(
                             painterResource(
                                 id = R.drawable.pause_24px
@@ -982,7 +996,7 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
                     onValueChange = { currentLayerIndex = it.toInt() },
                     valueRange = 0f..(layers.size - 1).toFloat(),
                     modifier = Modifier.weight(1f),
-                    enabled = !isPreFetching
+                    enabled = isHistoryReady // Enabled by isHistoryReady
                 )
             }
         }
