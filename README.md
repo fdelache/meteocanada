@@ -1,3 +1,5 @@
+[![Certified Shovelware](https://justin.searls.co/img/shovelware.svg)](https://justin.searls.co/shovelware/)
+
 # Meteo Canada
 
 Meteo Canada is a simple yet powerful weather application for Android, providing up-to-date weather information from Environment and Climate Change Canada (ECCC). The app is built with modern Android development tools, including Kotlin and Jetpack Compose, and features a clean, intuitive user interface.
