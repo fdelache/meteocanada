@@ -30,6 +30,7 @@ object MapUtils {
     private val nad83: CoordinateReferenceSystem = crsFactory.createFromName(EPSG_3978)
 
     private val transform: CoordinateTransform = ctFactory.createTransform(wgs84, nad83)
+    private val inverseTransform: CoordinateTransform = ctFactory.createTransform(nad83, wgs84)
 
     data class TileMatrix(
         val identifier: String,
@@ -245,7 +246,13 @@ object MapUtils {
         val minTileY = ((tileMatrix.topLeftCornerY - max.y) / resolution).toInt() / tileMatrix.tileHeight
         val maxTileY = ((tileMatrix.topLeftCornerY - min.y) / resolution).toInt() / tileMatrix.tileHeight
 
-        return Quadruple(minTileX, minTileY, maxTileX, maxTileY)
+        // Add buffer and clamp
+        val safeMinTileX = (minTileX - 1).coerceAtLeast(0)
+        val safeMaxTileX = (maxTileX + 1).coerceAtMost(tileMatrix.matrixWidth - 1)
+        val safeMinTileY = (minTileY - 1).coerceAtLeast(0)
+        val safeMaxTileY = (maxTileY + 1).coerceAtMost(tileMatrix.matrixHeight - 1)
+
+        return Quadruple(safeMinTileX, safeMinTileY, safeMaxTileX, safeMaxTileY)
     }
 
     fun getProjectedBounds(lat: Double, lon: Double, zoom: Int, width: Int, height: Int): Pair<ProjCoordinate, ProjCoordinate> {
@@ -266,6 +273,26 @@ object MapUtils {
         val maxY = centerProjected.y + halfHeightMeters
 
         return Pair(ProjCoordinate(minX, minY), ProjCoordinate(maxX, maxY))
+    }
+
+    fun project(lat: Double, lon: Double): ProjCoordinate {
+        val projCoordinate = ProjCoordinate(lon, lat)
+        val centerProjected = ProjCoordinate()
+        transform.transform(projCoordinate, centerProjected)
+        return centerProjected
+    }
+
+    fun transformInverse(x: Double, y: Double): ProjCoordinate {
+        val src = ProjCoordinate(x, y)
+        val dest = ProjCoordinate()
+        inverseTransform.transform(src, dest)
+        return dest
+    }
+
+    fun getResolution(zoom: Int): Double {
+        if (zoom < 0 || zoom >= radarTileMatrixSet.size) return 0.0
+        val tileMatrix = radarTileMatrixSet[zoom]
+        return tileMatrix.scaleDenominator * 0.00028
     }
 
     fun getBaseMapUrl(zoom: Int, x: Int, y: Int): String {
