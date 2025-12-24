@@ -6,7 +6,7 @@
 ## Core Features
 1.  **Current Conditions:** Real-time temperature, wind, "feels like", and condition icons.
 2.  **Forecasts:** Detailed hourly and daily weather predictions.
-3.  **Radar Map:** An interactive, animated radar map visualizing precipitation. It supports historical playback (1h or 3h history) and uses `proj4j` for correct map projections.
+3.  **Interactive Radar Map:** A fully interactive (pan & zoom) animated radar map visualizing precipitation. It supports historical playback (1h or 3h history) and uses `proj4j` for correct map projections (Lambert Conformal Conic).
 4.  **Location Management:**
     *   Automatic location detection (Fused Location Provider).
     *   Manual city search and management (add/remove saved cities).
@@ -18,15 +18,17 @@
 ## Tech Stack & Architecture
 *   **Language:** Kotlin
 *   **UI Framework:** **Jetpack Compose** (Material3 Design).
-*   **Architecture Pattern:** Currently a monolithic `MainActivity` containing Navigation, UI Composables, and Data Fetching. *Note: Future refactoring to MVVM is a potential improvement.*
-*   **Asynchronous Processing:** Kotlin Coroutines (`launch`, `async`, `produceState`).
+*   **Architecture Pattern:** **MVVM (Model-View-ViewModel)** with Repository pattern.
+    *   **UI:** Activities and Composables (`MainActivity`, `WeatherScreen`).
+    *   **ViewModel:** `WeatherViewModel` (manages UI state, survives configuration changes).
+    *   **Data:** `WeatherRepository` (abstracts API calls).
+*   **Asynchronous Processing:** Kotlin Coroutines & Flow (`StateFlow` for UI state).
 *   **Networking:**
-    *   `java.net.HttpURLConnection` (for API calls - *legacy style, could be upgraded to Retrofit/OkHttp*).
+    *   `java.net.HttpURLConnection` (inside `WeatherRepository` - specific low-level implementation).
     *   **Coil** (for async image loading, e.g., weather icons, radar tiles).
 *   **Location:** Google Play Services (`FusedLocationProviderClient`).
-*   **Mapping:** Custom implementation using `Proj4j` for coordinate projection (likely Lambert Conformal Conic for Canada) to tile coordinates.
+*   **Mapping:** Custom implementation using `Proj4j` to project WGS84 coordinates to Canada Atlas Lambert (EPSG:3978) for tile mapping.
 *   **Persistence:** `SharedPreferences` (wrapped in `UserPreferences`) for saving user settings and selected cities.
-*   **Build System:** Gradle (Kotlin DSL).
 
 ## Key Files & Directories
 
@@ -34,32 +36,37 @@
 *   `build.gradle.kts`: Project-level build configuration.
 
 ### App Module (`app/src/main/java/dev/isalazy/meteocanada/`)
-*   **`MainActivity.kt`**: The **God Object** of this application. It currently handles:
-    *   App entry point & Navigation host.
-    *   `WeatherScreen`, `SettingsScreen`, `RadarScreen` composables.
-    *   Fetching weather data from ECCC API (`fetchWeather`).
-    *   Parsing JSON responses (`parseWeatherData`).
-    *   City search logic.
-*   **`UserPreferences.kt`**: Wrapper around `SharedPreferences`. Manages:
-    *   Selected city & saved city list.
-    *   App language (en/fr).
-    *   Theme preference (Dark/Light).
-    *   Radar history settings.
-*   **`ui/MapUtils.kt`**: **Critical for Radar.** Contains math for converting geolocation (lat/lon) to map tile coordinates, handling the specific projections required by ECCC radar data.
-*   **`ui/composables/RadarMap.kt`**: Composable responsible for rendering the map tiles.
 
-### Resources (`app/src/main/res/`)
-*   `values/strings.xml`: English strings.
-*   `values-fr/strings.xml`: French strings.
-*   `drawable/`: Vector assets (icons).
+#### Core
+*   **`MainActivity.kt`**: App entry point. Sets up the Theme, Navigation Host, and initializes the `WeatherViewModel`. It contains the main UI Composables (`WeatherScreen`, `SettingsScreen`, `RadarScreen`).
+*   **`Models.kt`**: Contains data classes: `WeatherData`, `HourlyForecast`, `DailyForecast`, `CitySearchResult`.
+*   **`UserPreferences.kt`**: Wrapper around `SharedPreferences`. Manages selected city, language, theme, and radar settings.
+
+#### ViewModel (`/viewmodel`)
+*   **`WeatherViewModel.kt`**: Holds the logic for the app. Exposes `weatherData` and `citySearchResults` via `StateFlow`. Handles errors and loading states.
+*   `WeatherViewModelFactory`: Manual factory for injecting the Repository and Preferences into the ViewModel.
+
+#### Data (`/data`)
+*   **`WeatherRepository.kt`**: The single source of truth for data. Handles:
+    *   Fetching weather data from ECCC API.
+    *   Searching cities.
+    *   Parsing raw JSON responses into Model objects.
+
+#### UI (`/ui`)
+*   **`composables/RadarMap.kt`**: **Interactive Map Component.** Uses `detectTransformGestures` to handle pan and zoom. Renders Base, Text, and Radar layers.
+*   **`MapUtils.kt`**: **Critical Mapping Logic.**
+    *   Handles Coordinate Reference System (CRS) transformations (EPSG:4326 <-> EPSG:3978).
+    *   Calculates Tile Matrix logic (resolution, tile indices) for the custom ECCC tile server.
+    *   Includes logic to fetch specific tile layers (Base, City Names, Radar).
 
 ## External APIs (ECCC)
 *   **Weather Data:** `https://meteo.gc.ca/api/app/v3/{lang}/Location/{lat},{lon}?type=city`
 *   **City Search:** `https://meteo.gc.ca/api/accesscity/{lang}?query={query}&limit=50`
 *   **Icons:** `https://meteo.gc.ca/weathericons/{iconCode}.gif`
-*   **Radar Tiles:** Computed dynamically in `MapUtils`.
+*   **Radar Tiles:** Computed dynamically via WMTS templates in `MapUtils`.
 
-## Known Issues / specificities
-*   **Architecture:** The code is heavily concentrated in `MainActivity.kt`. Logic is mixed with UI code.
-*   **Permissions:** Location permission is handled manually with `ActivityResultContracts`.
-*   **Concurrency:** Heavy use of Coroutines for network requests directly in the UI layer (inside `LaunchedEffect` or `lifecycleScope`).
+## Specificities & Constraints
+*   **Dependency Injection:** Currently uses manual injection (Factories) instead of a DI framework like Hilt.
+*   **Permissions:** Location permission is handled via `ActivityResultContracts` in `MainActivity` and passed down via callbacks.
+*   **JSON Parsing:** Uses `org.json` (built-in Android) instead of Moshi/Gson. Logic is isolated in `WeatherRepository`.
+*   **Radar Rendering:** The map is *not* Google Maps. It is a custom `Box` based implementation rendering image tiles using Coil, aligned via complex projection math in `MapUtils`.
