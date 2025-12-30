@@ -778,7 +778,7 @@ fun RadarScreen(navController: NavController, lat: Double, lon: Double) {
             }
         } else if (layers.isNotEmpty()) {
             Box(modifier = Modifier.weight(1f)) {
-                RadarMap(layer = layers[currentLayerIndex], lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.fillMaxSize())
+                RadarMap(layers = layers, currentLayerIndex = currentLayerIndex, lat = lat, lon = lon, zoom = optimalZoom, modifier = Modifier.fillMaxSize())
                 Box(modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)) {

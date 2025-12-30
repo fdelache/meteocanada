@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
-fun RadarMap(layer: RadarLayer, lat: Double, lon: Double, zoom: Int, modifier: Modifier = Modifier) {
+fun RadarMap(layers: List<RadarLayer>, currentLayerIndex: Int, lat: Double, lon: Double, zoom: Int, modifier: Modifier = Modifier) {
     var currentZoom by remember { mutableIntStateOf(zoom) }
     var currentScale by remember { mutableFloatStateOf(1f) }
 
@@ -94,7 +94,8 @@ fun RadarMap(layer: RadarLayer, lat: Double, lon: Double, zoom: Int, modifier: M
                 }
         ) {
             MapContent(
-                layer = layer,
+                layers = layers,
+                currentLayerIndex = currentLayerIndex,
                 centerProjected = centerProjected,
                 zoom = currentZoom,
                 scale = currentScale,
@@ -107,7 +108,8 @@ fun RadarMap(layer: RadarLayer, lat: Double, lon: Double, zoom: Int, modifier: M
 
 @Composable
 fun MapContent(
-    layer: RadarLayer,
+    layers: List<RadarLayer>,
+    currentLayerIndex: Int,
     centerProjected: ProjCoordinate,
     zoom: Int,
     scale: Float,
@@ -153,8 +155,14 @@ fun MapContent(
         }
 
         if (radarLayoutParams != null) {
-            RenderTiles(radarMinX, radarMaxX, radarMinY, radarMaxY, radarLayoutParams, bounds, alpha = 0.5f) { x, y ->
-                MapUtils.getRadarMapUrl(layer, zoom, x, y)
+            // Render ALL layers, but control visibility with alpha.
+            // This prevents flickering because all images are in the composition tree.
+            // Coil will handle caching.
+            layers.forEachIndexed { index, layer ->
+                val alpha = if (index == currentLayerIndex) 0.5f else 0f
+                RenderTiles(radarMinX, radarMaxX, radarMinY, radarMaxY, radarLayoutParams, bounds, alpha = alpha) { x, y ->
+                    MapUtils.getRadarMapUrl(layer, zoom, x, y)
+                }
             }
         }
 
