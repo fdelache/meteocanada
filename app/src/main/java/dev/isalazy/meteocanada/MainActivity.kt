@@ -87,15 +87,14 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import coil3.ImageLoader
 import coil3.compose.AsyncImage
+import coil3.imageLoader
 import coil3.request.ImageRequest
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import dev.isalazy.meteocanada.UserPreferences.Companion.MONTREAL_LAT
 import dev.isalazy.meteocanada.UserPreferences.Companion.MONTREAL_LON
-import dev.isalazy.meteocanada.data.WeatherRepository
 import dev.isalazy.meteocanada.ui.MapUtils
 import dev.isalazy.meteocanada.ui.composables.RadarMap
 import dev.isalazy.meteocanada.ui.theme.MeteoCanadaTheme
@@ -115,10 +114,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var userPreferences: UserPreferences
-    private val repository = WeatherRepository() // Simple manual injection for now
 
     private val viewModel: WeatherViewModel by viewModels {
-        WeatherViewModelFactory(repository, userPreferences)
+        val app = application as MeteoCanadaApp
+        WeatherViewModelFactory(app.repository, app.userPreferences)
     }
 
     private val requestPermissionLauncher =
@@ -136,7 +135,9 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        userPreferences = UserPreferences(this)
+        
+        val app = application as MeteoCanadaApp
+        userPreferences = app.userPreferences
 
         // Set initial locale based on saved preference
         setLocale(userPreferences.appLanguage)
@@ -583,7 +584,7 @@ fun AddCityDialog(
 @Composable
 fun GreetingPreview() {
     MeteoCanadaTheme {
-        val navController = rememberNavController()
+        rememberNavController()
         // Mocking ViewModel or handling Preview would require a fake repo/viewModel or just separate the UI further.
         // For now, I'll comment out the preview or leave it broken as it needs a ViewModel instance.
     }
@@ -836,7 +837,7 @@ suspend fun preFetchRadarTiles(
     widthPx: Int,
     heightPx: Int
 ) {
-    val imageLoader = ImageLoader(context)
+    val imageLoader = context.imageLoader
     val requests = mutableListOf<ImageRequest>()
 
     val projectedBounds = MapUtils.getProjectedBounds(lat, lon, zoom, widthPx, heightPx)

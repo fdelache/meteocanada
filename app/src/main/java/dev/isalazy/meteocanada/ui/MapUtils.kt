@@ -114,81 +114,91 @@ object MapUtils {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://meteo.gc.ca/api/map/radar.3978/wmts/1.0.0/WMTSCapabilities.xml")
-                val inputStream = url.openStream()
-                val parser: XmlPullParser = Xml.newPullParser()
-                parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
-                parser.setInput(inputStream, null)
+                val layers = url.openStream().use { inputStream ->
+                    val parser: XmlPullParser = Xml.newPullParser()
+                    parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+                    parser.setInput(inputStream, null)
 
-                val layers = mutableListOf<RadarLayer>()
-                var eventType = parser.eventType
+                    val layers = mutableListOf<RadarLayer>()
+                    var eventType = parser.eventType
 
-                var inLayer = false
-                var inStyle = false
-                var inTileMatrixSetLink = false
-                var currentTag: String? = null
+                    var inLayer = false
+                    var inStyle = false
+                    var inTileMatrixSetLink = false
+                    var currentTag: String? = null
 
-                var identifier: String? = null
-                var style: String? = null
-                var tileMatrixSet: String? = null
-                var resourceUrlTemplate: String? = null
+                    var identifier: String? = null
+                    var style: String? = null
+                    var tileMatrixSet: String? = null
+                    var resourceUrlTemplate: String? = null
 
-                while (eventType != XmlPullParser.END_DOCUMENT) {
-                    when (eventType) {
-                        XmlPullParser.START_TAG -> {
-                            currentTag = parser.name
-                            when (currentTag) {
-                                "Layer" -> {
-                                    inLayer = true
-                                    identifier = null
-                                    style = null
-                                    tileMatrixSet = null
-                                    resourceUrlTemplate = null
-                                }
-                                "Style" -> if (inLayer) inStyle = true
-                                "TileMatrixSetLink" -> if (inLayer) inTileMatrixSetLink = true
-                                "ResourceURL" -> {
-                                    if (inLayer) {
-                                        resourceUrlTemplate = parser.getAttributeValue(null, "template")
-                                    }
-                                }
-                            }
-                        }
-                        XmlPullParser.TEXT -> {
-                            if (inLayer && parser.text.isNotBlank()) {
-                                val text = parser.text
+                    while (eventType != XmlPullParser.END_DOCUMENT) {
+                        when (eventType) {
+                            XmlPullParser.START_TAG -> {
+                                currentTag = parser.name
                                 when (currentTag) {
-                                    "ows:Identifier" -> {
-                                        if (inStyle) {
-                                            style = text
-                                        } else {
-                                            identifier = text
-                                        }
+                                    "Layer" -> {
+                                        inLayer = true
+                                        identifier = null
+                                        style = null
+                                        tileMatrixSet = null
+                                        resourceUrlTemplate = null
                                     }
-                                    "TileMatrixSet" -> {
-                                        if (inTileMatrixSetLink) {
-                                            tileMatrixSet = text
+                                    "Style" -> if (inLayer) inStyle = true
+                                    "TileMatrixSetLink" -> if (inLayer) inTileMatrixSetLink = true
+                                    "ResourceURL" -> {
+                                        if (inLayer) {
+                                            resourceUrlTemplate =
+                                                parser.getAttributeValue(null, "template")
                                         }
                                     }
                                 }
                             }
-                        }
-                        XmlPullParser.END_TAG -> {
-                            when (parser.name) {
-                                "Layer" -> {
-                                    if (identifier != null && identifier.startsWith("RADAR_1KM_RRAI_14_") && style != null && tileMatrixSet != null && resourceUrlTemplate != null) {
-                                        layers.add(RadarLayer(identifier, style, tileMatrixSet, resourceUrlTemplate))
+                            XmlPullParser.TEXT -> {
+                                if (inLayer && parser.text.isNotBlank()) {
+                                    val text = parser.text
+                                    when (currentTag) {
+                                        "ows:Identifier" -> {
+                                            if (inStyle) {
+                                                style = text
+                                            } else {
+                                                identifier = text
+                                            }
+                                        }
+                                        "TileMatrixSet" -> {
+                                            if (inTileMatrixSetLink) {
+                                                tileMatrixSet = text
+                                            }
+                                        }
                                     }
-                                    inLayer = false
                                 }
-                                "Style" -> inStyle = false
-                                "TileMatrixSetLink" -> inTileMatrixSetLink = false
                             }
-                            currentTag = null
+                            XmlPullParser.END_TAG -> {
+                                when (parser.name) {
+                                    "Layer" -> {
+                                        if (identifier != null && identifier.startsWith("RADAR_1KM_RRAI_14_") && style != null && tileMatrixSet != null && resourceUrlTemplate != null) {
+                                            layers.add(
+                                                RadarLayer(
+                                                    identifier,
+                                                    style,
+                                                    tileMatrixSet,
+                                                    resourceUrlTemplate
+                                                )
+                                            )
+                                        }
+                                        inLayer = false
+                                    }
+                                    "Style" -> inStyle = false
+                                    "TileMatrixSetLink" -> inTileMatrixSetLink = false
+                                }
+                                currentTag = null
+                            }
                         }
+                        eventType = parser.next()
                     }
-                    eventType = parser.next()
+                    layers
                 }
-                inputStream.close()
+
                 val sortedLayers = layers.sortedBy { it.identifier }
 
                 val now = getTimestampFromIdentifier(sortedLayers.last().identifier) ?: Date()
@@ -280,13 +290,6 @@ object MapUtils {
         val centerProjected = ProjCoordinate()
         transform.transform(projCoordinate, centerProjected)
         return centerProjected
-    }
-
-    fun transformInverse(x: Double, y: Double): ProjCoordinate {
-        val src = ProjCoordinate(x, y)
-        val dest = ProjCoordinate()
-        inverseTransform.transform(src, dest)
-        return dest
     }
 
     fun getResolution(zoom: Int): Double {

@@ -89,7 +89,7 @@ class WeatherRepository {
         // Handle potentially different timestamp formats or parse errors gracefully
         val date = try {
             inputFormat.parse(timestampString)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
         

@@ -40,7 +40,6 @@ fun RadarMap(layers: List<RadarLayer>, currentLayerIndex: Int, lat: Double, lon:
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoomChange, _ ->
-                        val oldScale = currentScale
                         currentScale *= zoomChange
 
                         // 1. Update Scale & Check for Zoom Level Switch
